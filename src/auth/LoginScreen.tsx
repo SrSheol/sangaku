@@ -3,7 +3,7 @@ import { FirebaseError } from 'firebase/app'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { motion } from 'framer-motion'
 import { auth } from '../firebase'
-import { SealMark } from '../components/ui/InkAssets'
+import { SealMark, TornEdge } from '../components/ui/InkAssets'
 import { LoginBackground } from './LoginBackground'
 import {
   AUTH_EMAILS,
@@ -168,12 +168,14 @@ export function LoginScreen() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
         >
+          <TornEdge />
           <div className="login-mark"><SealMark size={40} glyph="門" /></div>
           <p className="gate-kicker">門 · cerrado</p>
           <h1 className="gate-title">El sello permanece</h1>
           <p className="gate-editorial">Demasiados intentos inválidos</p>
           <p className="gate-msg">El portal se reabre en breve.</p>
           <p className="lockout-countdown">{String(remainingSec).padStart(2, '0')}s</p>
+          <TornEdge flip />
         </motion.div>
       </div>
     )
@@ -190,6 +192,7 @@ export function LoginScreen() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
       >
+        <TornEdge />
         <div className="login-brand">
           <div className="login-mark"><SealMark size={48} glyph="算" /></div>
           <p className="gate-kicker">算額 · Sangaku</p>
@@ -241,6 +244,7 @@ export function LoginScreen() {
             ¿Eres invitado?
           </button>
         </p>
+        <TornEdge flip />
       </motion.form>
     </div>
   )

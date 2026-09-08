@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
+import { TornEdge } from './InkAssets'
 
 export function Modal({
   title,
@@ -23,8 +24,10 @@ export function Modal({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         onClick={(e) => e.stopPropagation()}
       >
+        <TornEdge />
         <h2>{title}</h2>
         {children}
+        <TornEdge flip />
       </motion.div>
     </div>
   )

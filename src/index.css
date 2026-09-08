@@ -2,41 +2,53 @@
 @import "lenis/dist/lenis.css";
 
 /* ============================================================
-   SANGAKU — sumi-e / washi / vermillion identity
-   Total redesign: ink-black, warm paper, red seals, gold leaf.
+   SANGAKU — sumi-e / washi / suzuri / shuiro identity
+   Design pass 3: real ink palette, torn-paper surfaces,
+   a centred ceremonial composition, two ink-brush koi adrift.
    ============================================================ */
 
 :root {
-  /* Ink */
-  --ink: #100d08;
-  --ink-2: #1a1610;
-  --ink-3: #241f16;
-  --ink-soft: rgba(16, 13, 8, 0.86);
+  /* Sumi ink — warm charcoal, not flat black */
+  --sumi: #15130f;
+  --sumi-2: #1e1a14;
+  --sumi-3: #29241b;
+  --sumi-soft: rgba(21, 19, 15, 0.86);
 
-  /* Washi paper */
-  --washi: #efe6d0;
-  --washi-2: #e6d9bc;
-  --washi-dim: #cbbd97;
-  --washi-glass: rgba(239, 230, 208, 0.08);
-  --washi-glass-strong: rgba(239, 230, 208, 0.14);
+  /* Washi paper — warm kinari, no muddy grey */
+  --washi: #f4ead4;
+  --washi-2: #ead9b4;
+  --washi-dim: #cbb98d;
+  --washi-glass: rgba(244, 234, 212, 0.07);
+  --washi-glass-strong: rgba(244, 234, 212, 0.13);
 
-  /* Seals + leaf */
-  --vermillion: #b6392a;
-  --vermillion-deep: #8a2a1f;
-  --vermillion-soft: rgba(182, 57, 42, 0.5);
-  --gold: #b78f42;
-  --gold-bright: #d8b463;
-  --gold-hairline: rgba(183, 143, 66, 0.4);
+  /* Suzuri — cool inkstone slate, structural neutral (keeps washi from reading muddy) */
+  --suzuri: #454b52;
+  --suzuri-soft: rgba(88, 100, 110, 0.34);
+
+  /* Shuiro seal + kintsugi gold */
+  --vermillion: #c1442c;
+  --vermillion-deep: #822c1c;
+  --vermillion-soft: rgba(193, 68, 44, 0.52);
+  --gold: #bd9550;
+  --gold-bright: #e3bd76;
+  --gold-hairline: rgba(189, 149, 80, 0.4);
+  --kintsugi: linear-gradient(120deg, #a8792f, #f0cd8a 45%, #a8792f);
 
   /* Status semantics */
-  --st-neutral: #8d8570;
+  --st-neutral: #8b9199;
   --st-progress: var(--gold-bright);
-  --st-done: #6f7f5c;
-  --st-cancel: #8a4a3c;
+  --st-done: #74886a;
+  --st-cancel: #93493a;
 
-  --hairline: rgba(183, 143, 66, 0.26);
-  --shadow-deep: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(239, 230, 208, 0.04);
-  --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.35);
+  --hairline: rgba(189, 149, 80, 0.24);
+  --ink-line: rgba(244, 234, 212, 0.22);
+  --shadow-deep: 0 26px 64px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(244, 234, 212, 0.04);
+  --shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.38);
+
+  /* Paper surface fills used by every "washi panel" */
+  --paper-panel: linear-gradient(165deg, rgba(244, 234, 212, 0.075), rgba(244, 234, 212, 0.025) 60%, rgba(193, 68, 44, 0.03));
+  --paper-panel-deep: linear-gradient(165deg, rgba(41, 36, 27, 0.92), rgba(21, 19, 15, 0.88));
+  --fiber-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.9' numOctaves='2' seed='11' result='n'/%3E%3CfeColorMatrix in='n' type='matrix' values='0 0 0 0 1  0 0 0 0 0.94  0 0 0 0 0.8  0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
 
   --font-jp: "Shippori Mincho", "Hiragino Mincho ProN", serif;
   --font-brush: "Zen Antique", "Shippori Mincho", serif;
@@ -44,7 +56,7 @@
   --font-editorial: "Playfair Display", Georgia, serif;
   --font-ui: "Helvetica Neue", Arial, "Hiragino Sans", system-ui, sans-serif;
 
-  --rail-w: 6.4rem;
+  --bar-h: 4.6rem;
 }
 
 *,
@@ -68,7 +80,7 @@ body {
   margin: 0;
   font-family: var(--font-ui);
   color: var(--washi);
-  background: var(--ink);
+  background: var(--sumi);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -101,6 +113,85 @@ button {
 }
 
 /* ————————————————————————————————————————————
+   Hidden defs — SVG ink-wobble filters used by .washi-frame
+   ———————————————————————————————————————————— */
+.ink-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ————————————————————————————————————————————
+   Universal "washi surface" system.
+   Applied to a ::before that sits behind real (crisp) content,
+   so brush-wobble distortion never touches text.
+   ———————————————————————————————————————————— */
+.washi-frame {
+  position: relative;
+  z-index: 0;
+  background: transparent !important;
+}
+
+.washi-frame > * {
+  position: relative;
+  z-index: 1;
+}
+
+.washi-frame::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--paper-panel-deep);
+  border: 1.4px solid var(--ink-line);
+  box-shadow: var(--shadow-soft);
+  filter: url(#ink-wobble);
+}
+
+.washi-frame.tone-paper::before {
+  background: var(--paper-panel), var(--sumi-2);
+  border-color: var(--gold-hairline);
+}
+
+.washi-frame::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  background-image: var(--fiber-texture);
+  background-size: 220px 220px;
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+  filter: url(#ink-wobble);
+  pointer-events: none;
+}
+
+/* Cheap organic finish for high-repeat items (cards, chips, cells):
+   asymmetric radii + a two-tone brush-gradient border, no per-item filter cost. */
+.washi-fleck {
+  position: relative;
+  border: 1px solid transparent;
+  background:
+    var(--paper-panel) padding-box,
+    linear-gradient(180deg, var(--gold-hairline), var(--suzuri-soft) 55%, var(--vermillion-soft)) border-box;
+}
+
+.washi-fleck::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: var(--fiber-texture);
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ————————————————————————————————————————————
    Boot sequence — brush strokes + seal drop
    ———————————————————————————————————————————— */
 .boot-sequence {
@@ -109,7 +200,7 @@ button {
   z-index: 100;
   display: grid;
   place-items: center;
-  background: var(--ink);
+  background: var(--sumi);
   cursor: pointer;
   overflow: hidden;
 }
@@ -118,8 +209,8 @@ button {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse at 50% 38%, rgba(36, 31, 22, 0.75), transparent 55%),
-    linear-gradient(180deg, #171209, var(--ink) 70%);
+    radial-gradient(ellipse at 50% 38%, rgba(41, 36, 27, 0.75), transparent 55%),
+    linear-gradient(180deg, #1c170f, var(--sumi) 70%);
 }
 
 .boot-strokes {
@@ -157,7 +248,7 @@ button {
 }
 
 .boot-seal {
-  filter: drop-shadow(0 10px 30px rgba(182, 57, 42, 0.35));
+  filter: drop-shadow(0 10px 30px rgba(193, 68, 44, 0.35));
 }
 
 .boot-copy {
@@ -205,7 +296,7 @@ button {
 }
 
 /* ————————————————————————————————————————————
-   Login / gate
+   Login / gate — a scroll unrolled, not a modal box
    ———————————————————————————————————————————— */
 .login-screen,
 .gate-boot {
@@ -214,7 +305,7 @@ button {
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--ink);
+  background: var(--sumi);
 }
 
 .login-bg {
@@ -252,13 +343,35 @@ button {
   position: relative;
   z-index: 1;
   width: min(440px, calc(100vw - 2.5rem));
-  padding: 3rem 2.5rem 2.25rem;
-  background: rgba(16, 13, 8, 0.6);
-  border: 1px solid var(--gold-hairline);
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+  padding: 2.75rem 2.5rem 2.1rem;
+  background: transparent;
+  box-shadow: none;
+}
+
+.login-gate::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  border-radius: 4px 34px 4px 34px / 26px 4px 26px 4px;
+  background: var(--paper-panel-deep);
+  border: 1.4px solid var(--gold-hairline);
   box-shadow: var(--shadow-deep);
   backdrop-filter: blur(20px);
+  filter: url(#ink-wobble);
 }
+
+.login-gate .torn-edge {
+  position: absolute;
+  left: 6%;
+  width: 88%;
+  height: 13px;
+  color: var(--sumi-2);
+  opacity: 0.9;
+}
+
+.login-gate .torn-edge:first-of-type { top: -7px; }
+.login-gate .torn-edge.is-flip { bottom: -7px; top: auto; }
 
 .login-brand {
   margin-bottom: 2rem;
@@ -271,7 +384,7 @@ button {
 
 .login-mark {
   display: block;
-  filter: drop-shadow(0 6px 16px rgba(182, 57, 42, 0.4));
+  filter: drop-shadow(0 6px 16px rgba(193, 68, 44, 0.4));
 }
 
 .gate-kicker {
@@ -319,7 +432,7 @@ button {
   text-align: center;
   font-size: 0.74rem;
   letter-spacing: 0.03em;
-  color: rgba(203, 189, 151, 0.75);
+  color: rgba(203, 185, 141, 0.78);
 }
 
 .guest-hint-link {
@@ -360,10 +473,10 @@ button {
 .form-grid textarea,
 .modal textarea {
   width: 100%;
-  border-radius: 0;
+  border-radius: 2px 8px 2px 8px;
   border: 1px solid var(--washi-glass-strong);
   border-bottom: 2px solid var(--gold-hairline);
-  background: rgba(16, 13, 8, 0.5);
+  background: rgba(21, 19, 15, 0.5);
   padding: 0.78rem 0.9rem;
   outline: none;
   transition: border-color 0.25s, box-shadow 0.25s;
@@ -379,19 +492,21 @@ button {
 .form-grid textarea:focus,
 .modal textarea:focus {
   border-color: var(--gold-bright);
-  box-shadow: 0 0 0 2px rgba(183, 143, 66, 0.12);
+  box-shadow: 0 0 0 2px rgba(189, 149, 80, 0.14);
 }
 
 .error-box {
   margin: 0 0 1rem;
   padding: 0.7rem 0.9rem;
-  border: 1px solid rgba(138, 42, 31, 0.5);
-  background: rgba(138, 42, 31, 0.16);
-  color: #e9c7bd;
+  border-radius: 2px 10px 2px 10px;
+  border: 1px solid rgba(130, 44, 28, 0.5);
+  background: rgba(130, 44, 28, 0.18);
+  color: #f0cdc2;
   font-size: 0.83rem;
 }
 
 .btn-seal {
+  position: relative;
   width: 100%;
   border: none;
   padding: 0.95rem 1.3rem;
@@ -402,14 +517,15 @@ button {
   font-family: var(--font-display);
   font-size: 0.72rem;
   font-weight: 600;
-  box-shadow: 0 10px 26px rgba(182, 57, 42, 0.3);
+  border-radius: 3px 14px 3px 14px;
+  box-shadow: 0 10px 26px rgba(193, 68, 44, 0.32);
   transition: transform 0.2s, filter 0.2s, box-shadow 0.2s;
 }
 
 .btn-seal:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: brightness(1.08);
-  box-shadow: 0 14px 32px rgba(182, 57, 42, 0.4);
+  box-shadow: 0 14px 32px rgba(193, 68, 44, 0.42);
 }
 
 .btn-seal:disabled {
@@ -425,18 +541,19 @@ button {
 
 .btn-ghost {
   border: 1px solid var(--washi-glass-strong);
-  background: rgba(239, 230, 208, 0.03);
+  background: rgba(244, 234, 212, 0.03);
   color: var(--washi-dim);
   padding: 0.55rem 0.95rem;
   font-size: 0.72rem;
   letter-spacing: 0.06em;
+  border-radius: 2px 10px 2px 10px;
   transition: border-color 0.2s, color 0.2s, background 0.2s;
 }
 
 .btn-ghost:hover:not(:disabled) {
   border-color: var(--gold-hairline);
   color: var(--washi);
-  background: rgba(183, 143, 66, 0.08);
+  background: rgba(189, 149, 80, 0.08);
 }
 
 .btn-ghost:disabled {
@@ -457,15 +574,16 @@ button {
 }
 
 /* ————————————————————————————————————————————
-   Atelier shell — seal-rail + scroll canvas
-   (replaces the old topbar / KPI-grid / tab-row IA)
+   Atelier shell — top ceremonial bar + a centred hanging-scroll canvas.
+   Composition follows "ma": the canvas sits left-of-centre with a
+   generous quiet margin on the right, instead of a crushed left rail.
    ———————————————————————————————————————————— */
 .atelier {
   position: relative;
   min-height: 100vh;
-  display: grid;
-  grid-template-columns: var(--rail-w) 1fr;
-  background: var(--ink);
+  display: flex;
+  flex-direction: column;
+  background: var(--sumi);
 }
 
 .atelier-wash {
@@ -474,104 +592,125 @@ button {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 60% 40% at 85% -5%, rgba(183, 143, 66, 0.07), transparent 60%),
-    radial-gradient(ellipse 50% 50% at 0% 100%, rgba(182, 57, 42, 0.05), transparent 60%);
+    radial-gradient(ellipse 60% 40% at 85% -5%, rgba(189, 149, 80, 0.08), transparent 60%),
+    radial-gradient(ellipse 50% 50% at 6% 100%, rgba(193, 68, 44, 0.05), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 50% 50%, rgba(69, 75, 82, 0.05), transparent 70%);
 }
 
-.seal-rail {
+/* Top ceremonial bar (formerly a left seal-rail) */
+.washi-topbar {
   position: sticky;
   top: 0;
-  z-index: 5;
-  height: 100vh;
+  z-index: 20;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1.75rem;
-  padding: 1.6rem 0 1.4rem;
-  background: linear-gradient(180deg, var(--ink-2), var(--ink));
-  border-right: 1px solid var(--hairline);
+  gap: 1.5rem;
+  height: var(--bar-h);
+  padding: 0 clamp(1.1rem, 3vw, 2.4rem);
+  background: linear-gradient(180deg, rgba(30, 26, 20, 0.92), rgba(21, 19, 15, 0.85));
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--hairline);
+  box-shadow: 0 1px 0 rgba(244, 234, 212, 0.03), 0 18px 30px -20px rgba(0, 0, 0, 0.6);
 }
 
 .rail-brand {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
+  flex: 0 0 auto;
 }
 
 .rail-brand-label {
   font-family: var(--font-jp);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   letter-spacing: 0.32em;
   color: var(--washi-dim);
 }
 
 .rail-views {
   display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  width: 100%;
-  padding: 0 0.6rem;
+  align-items: stretch;
+  gap: 0.3rem;
+  margin: 0 auto;
+  padding: 0;
 }
 
 .rail-view {
+  position: relative;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0.3rem;
-  width: 100%;
-  border: 1px solid transparent;
+  gap: 0.45rem;
+  border: none;
   background: transparent;
-  padding: 0.7rem 0.2rem;
+  padding: 0.5rem 0.9rem;
   color: var(--washi-dim);
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  border-radius: 3px 12px 3px 12px;
+  transition: color 0.2s, background 0.2s;
 }
 
 .rail-num {
   font-family: var(--font-brush);
-  font-size: 1.3rem;
+  font-size: 1.05rem;
   line-height: 1;
+  color: var(--gold);
 }
 
 .rail-label {
-  font-size: 0.56rem;
-  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
   text-align: center;
   line-height: 1.15;
 }
 
+.rail-view::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0.15rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--vermillion);
+  transform: scaleX(0);
+  transform-origin: 50% 50%;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .rail-view:hover {
   color: var(--washi);
-  background: rgba(183, 143, 66, 0.06);
+  background: rgba(189, 149, 80, 0.07);
 }
 
 .rail-view.is-active {
   color: var(--washi);
-  border-color: var(--gold-hairline);
-  background: rgba(183, 143, 66, 0.1);
-  box-shadow: inset 2px 0 0 var(--vermillion);
+}
+
+.rail-view.is-active::after {
+  transform: scaleX(1);
 }
 
 .rail-spacer {
-  flex: 1;
+  flex: 0 0 0;
 }
 
 .rail-tools {
   display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
+  flex-direction: row;
+  gap: 0.5rem;
   align-items: center;
+  flex: 0 0 auto;
 }
 
 .rail-tool {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 46% 54% 52% 48% / 52% 46% 54% 48%;
   border: 1px solid var(--washi-glass-strong);
-  background: rgba(239, 230, 208, 0.03);
+  background: rgba(244, 234, 212, 0.03);
   color: var(--washi-dim);
   font-family: var(--font-jp);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   display: grid;
   place-items: center;
   transition: border-color 0.2s, color 0.2s, transform 0.2s, background 0.2s;
@@ -580,18 +719,18 @@ button {
 .rail-tool:hover {
   color: var(--washi);
   border-color: var(--gold-hairline);
-  transform: scale(1.06);
+  transform: scale(1.06) rotate(-3deg);
 }
 
 .rail-tool.is-active {
-  color: var(--ink);
+  color: var(--sumi);
   background: var(--gold-bright);
   border-color: var(--gold-bright);
 }
 
 .rail-exit {
   color: var(--vermillion-soft);
-  border-color: rgba(182, 57, 42, 0.3);
+  border-color: rgba(193, 68, 44, 0.32);
 }
 
 .rail-exit:hover {
@@ -600,13 +739,38 @@ button {
   border-color: var(--vermillion);
 }
 
-/* Canvas / main content */
+/* Canvas / main content — offset, asymmetric "ma" composition */
 .canvas {
   position: relative;
   z-index: 1;
-  padding: 2.6rem clamp(1.25rem, 4vw, 3.5rem) 4rem;
-  max-width: 1180px;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2.8rem clamp(1.15rem, 4vw, 3rem) 5rem;
 }
+
+@media (min-width: 1440px) {
+  .canvas {
+    margin-left: max(auto, 5vw);
+    margin-right: auto;
+  }
+}
+
+.scroll-panel {
+  position: relative;
+  padding: 1.6rem clamp(1rem, 3vw, 2.2rem) 1.9rem;
+}
+
+.scroll-panel .torn-edge {
+  position: absolute;
+  left: 2%;
+  width: 96%;
+  height: 13px;
+  color: var(--sumi);
+}
+
+.scroll-panel .torn-edge:first-of-type { top: -1px; }
+.scroll-panel .torn-edge.is-flip { bottom: -1px; top: auto; }
 
 .canvas-header {
   display: flex;
@@ -653,46 +817,45 @@ button {
 
 .stamp-row {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.6rem;
   flex-wrap: wrap;
 }
 
 .stamp-stat {
-  min-width: 5.4rem;
-  padding: 0.7rem 0.9rem;
-  text-align: center;
-  border: 1px solid var(--washi-glass-strong);
-  background: rgba(239, 230, 208, 0.03);
   position: relative;
+  min-width: 5rem;
+  padding: 0.75rem 0.6rem 0.6rem;
+  text-align: center;
+  border-radius: 44% 56% 58% 42% / 56% 48% 52% 44%;
 }
 
-.stamp-stat::after {
+.stamp-stat::before {
   content: '';
   position: absolute;
-  left: 50%;
-  bottom: -1px;
-  width: 60%;
-  height: 2px;
-  transform: translateX(-50%);
-  background: currentColor;
-  opacity: 0.55;
+  inset: -2px;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--paper-panel-deep);
+  border: 1.2px solid currentColor;
+  opacity: 0.9;
+  filter: url(#ink-wobble-sm);
 }
 
 .stamp-stat p {
   margin: 0.15rem 0 0;
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   letter-spacing: 0.05em;
   color: var(--washi-dim);
 }
 
 .stamp-stat strong {
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   color: var(--washi);
 }
 
-.stamp-stat.tone-ink { color: var(--washi-dim); }
-.stamp-stat.tone-crimson { color: var(--vermillion-soft); }
+.stamp-stat.tone-ink { color: var(--suzuri); }
+.stamp-stat.tone-crimson { color: var(--vermillion); }
 .stamp-stat.tone-copper { color: var(--gold); }
 .stamp-stat.tone-gold { color: var(--gold-bright); }
 .stamp-stat.tone-ivory { color: var(--st-done); }
@@ -704,11 +867,27 @@ button {
   display: block;
 }
 
+.torn-edge {
+  display: block;
+  width: 100%;
+  height: 14px;
+  fill: currentColor;
+}
+
+.torn-edge.is-flip {
+  transform: scaleY(-1);
+}
+
+.torn-edge path {
+  fill: currentColor;
+}
+
 .guest-banner {
   margin: 0 0 1.25rem;
   padding: 0.6rem 0.9rem;
+  border-radius: 2px 12px 2px 12px;
   border: 1px dashed var(--gold-hairline);
-  background: rgba(183, 143, 66, 0.06);
+  background: rgba(189, 149, 80, 0.06);
   color: var(--gold-bright);
   font-size: 0.78rem;
   letter-spacing: 0.04em;
@@ -716,11 +895,22 @@ button {
 }
 
 .tools-drawer {
-  overflow: hidden;
-  margin-bottom: 1.4rem;
-  border: 1px solid var(--hairline);
-  background: rgba(26, 22, 16, 0.6);
-  padding: 1rem 1.15rem 1.15rem;
+  position: relative;
+  overflow: visible;
+  margin-bottom: 1.6rem;
+  padding: 1.1rem 1.2rem 1.25rem;
+  border-radius: 4px 20px 4px 20px / 16px 4px 20px 4px;
+}
+
+.tools-drawer::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--paper-panel-deep);
+  border: 1.2px solid var(--hairline);
+  filter: url(#ink-wobble);
 }
 
 .tools-kicker {
@@ -739,52 +929,59 @@ button {
 
 /* Filters — a folded scroll strip rather than a glass card row */
 .scroll-fold {
+  position: relative;
   margin-bottom: 1.5rem;
   padding: 1.1rem 1.25rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
-  background: rgba(26, 22, 16, 0.55);
+}
+
+.scroll-fold::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(41, 36, 27, 0.55), rgba(41, 36, 27, 0.4));
   border-top: 1px solid var(--gold-hairline);
   border-bottom: 1px solid var(--hairline);
+  mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
 }
 
 .search {
-  flex: 1 1 220px;
-  min-width: 180px;
+  min-width: 12rem;
+  flex: 1 1 12rem;
 }
 
 .toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   font-size: 0.78rem;
   color: var(--washi-dim);
-  white-space: nowrap;
 }
 
 .saved-filters {
   display: flex;
-  gap: 0.4rem;
-  align-items: center;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .save-filter-name {
-  width: 9rem;
+  width: 10rem;
 }
 
 .filter-count {
-  margin: 0 0 0 auto;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
+  margin: 0.6rem 0 0;
+  font-size: 0.7rem;
   color: var(--washi-dim);
-  white-space: nowrap;
+  text-align: right;
 }
 
 /* ————————————————————————————————————————————
-   Task board / list
+   Task board / cards — torn strips of paper, hand-set
    ———————————————————————————————————————————— */
 .task-board {
   position: relative;
@@ -797,38 +994,50 @@ button {
 }
 
 .skeleton-card {
-  height: 5.2rem;
-  background: linear-gradient(100deg, rgba(239, 230, 208, 0.03) 20%, rgba(239, 230, 208, 0.08) 40%, rgba(239, 230, 208, 0.03) 60%);
-  background-size: 200% 100%;
-  animation: shimmer 1.6s ease-in-out infinite;
-  border: 1px solid var(--washi-glass-strong);
+  height: 4.4rem;
+  border-radius: 4px 18px 4px 18px / 14px 4px 18px 4px;
+  background: linear-gradient(100deg, rgba(244, 234, 212, 0.03) 30%, rgba(244, 234, 212, 0.08) 50%, rgba(244, 234, 212, 0.03) 70%);
+  background-size: 220% 100%;
+  animation: skeleton-shift 1.6s ease-in-out infinite;
 }
 
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+@keyframes skeleton-shift {
+  0% { background-position: 120% 0; }
+  100% { background-position: -20% 0; }
 }
 
 .empty-state {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  padding: 4rem 1rem;
+  padding: 4.5rem 1rem 4rem;
   text-align: center;
 }
 
 .empty-seal {
-  width: 3.6rem;
-  height: 3.6rem;
+  position: relative;
+  width: 3.8rem;
+  height: 3.8rem;
   display: grid;
   place-items: center;
-  border: 2px solid var(--vermillion-soft);
-  color: var(--vermillion-soft);
+  color: var(--vermillion);
   font-family: var(--font-jp);
   font-size: 1.6rem;
   margin-bottom: 0.6rem;
   transform: rotate(-4deg);
+  border-radius: 42% 58% 55% 45% / 55% 42% 58% 45%;
+}
+
+.empty-seal::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: -1;
+  border-radius: inherit;
+  border: 2px solid currentColor;
+  filter: url(#ink-wobble-sm);
 }
 
 .empty-state h2 {
@@ -878,6 +1087,7 @@ button {
   font-family: var(--font-ui);
   font-size: 0.7rem;
   color: var(--washi-dim);
+  border-radius: 2px 8px 2px 8px;
   border: 1px solid var(--washi-glass-strong);
   padding: 0.1rem 0.5rem;
 }
@@ -889,18 +1099,20 @@ button {
 .card-list {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.7rem;
 }
 
 /* Task card — a torn strip of paper, not a glass tile */
 .task-card {
   position: relative;
-  background: linear-gradient(180deg, rgba(239, 230, 208, 0.05), rgba(239, 230, 208, 0.02));
-  border: 1px solid var(--washi-glass-strong);
-  border-left: 3px solid var(--st-neutral);
   display: flex;
-  transition: border-color 0.2s, background 0.2s;
+  border-left: 3px solid var(--st-neutral);
+  border-radius: 3px 16px 4px 20px / 14px 4px 18px 5px;
+  transition: filter 0.2s, transform 0.15s;
 }
+
+.card-list .task-card:nth-child(odd) { transform: rotate(-0.3deg); }
+.card-list .task-card:nth-child(even) { transform: rotate(0.25deg); }
 
 .task-card.urg-overdue { border-left-color: var(--vermillion); }
 .task-card.urg-soon { border-left-color: var(--gold-bright); }
@@ -908,7 +1120,8 @@ button {
 .task-card.is-done { border-left-color: var(--st-done); }
 
 .task-card:hover {
-  background: linear-gradient(180deg, rgba(183, 143, 66, 0.06), rgba(239, 230, 208, 0.02));
+  filter: brightness(1.06);
+  transform: rotate(0deg) translateX(1px);
 }
 
 .card-main {
@@ -931,6 +1144,7 @@ button {
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   color: var(--washi-dim);
+  border-radius: 2px 8px 2px 8px;
   border: 1px solid var(--washi-glass-strong);
   padding: 0.12rem 0.45rem;
 }
@@ -939,7 +1153,8 @@ button {
   font-size: 0.62rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  padding: 0.14rem 0.55rem;
+  padding: 0.16rem 0.6rem;
+  border-radius: 999px;
   border: 1px solid transparent;
 }
 
@@ -953,8 +1168,9 @@ button {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--gold-bright);
-  background: rgba(183, 143, 66, 0.12);
-  padding: 0.14rem 0.5rem;
+  background: rgba(189, 149, 80, 0.12);
+  border-radius: 999px;
+  padding: 0.14rem 0.55rem;
 }
 
 .remind-badge.overdue {
@@ -1066,7 +1282,7 @@ button {
 
 .cal-nav {
   border: 1px solid var(--washi-glass-strong);
-  background: rgba(239, 230, 208, 0.03);
+  background: rgba(244, 234, 212, 0.03);
   color: var(--washi-dim);
   width: 2.1rem;
   height: 2.1rem;
@@ -1089,13 +1305,15 @@ button {
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
-  background: var(--hairline);
+  gap: 3px;
+  background: transparent;
+  border-radius: 6px 22px 6px 22px / 18px 6px 22px 6px;
+  overflow: hidden;
   border: 1px solid var(--hairline);
 }
 
 .cal-dow {
-  background: var(--ink-2);
+  background: var(--sumi-2);
   text-align: center;
   padding: 0.5rem 0;
   font-size: 0.62rem;
@@ -1115,7 +1333,7 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
-  background: var(--ink-2);
+  background: var(--sumi-2);
   min-height: 84px;
   padding: 0.5rem;
   display: flex;
@@ -1129,12 +1347,12 @@ button {
 }
 
 .cal-cell:hover {
-  background: rgba(183, 143, 66, 0.08);
+  background: rgba(189, 149, 80, 0.08);
 }
 
 .cal-cell.is-open {
   box-shadow: inset 0 0 0 1px var(--gold-bright);
-  background: rgba(183, 143, 66, 0.12);
+  background: rgba(189, 149, 80, 0.12);
 }
 
 .cal-daynum {
@@ -1155,14 +1373,14 @@ button {
   height: 6px;
   border-radius: 50%;
   background: var(--vermillion);
-  box-shadow: 0 0 0 0 rgba(182, 57, 42, 0.6);
+  box-shadow: 0 0 0 0 rgba(193, 68, 44, 0.6);
   animation: cal-pulse 2.2s ease-out infinite;
 }
 
 @keyframes cal-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(182, 57, 42, 0.55); }
-  70% { box-shadow: 0 0 0 7px rgba(182, 57, 42, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(182, 57, 42, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(193, 68, 44, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(193, 68, 44, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(193, 68, 44, 0); }
 }
 
 .cal-items {
@@ -1173,9 +1391,10 @@ button {
 
 .cal-chip {
   font-size: 0.58rem;
-  padding: 0.08rem 0.3rem;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
   border-left: 2px solid var(--st-neutral);
-  background: rgba(239, 230, 208, 0.04);
+  background: rgba(244, 234, 212, 0.04);
   color: var(--washi-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1192,10 +1411,21 @@ button {
 }
 
 .cal-day-drawer {
+  position: relative;
   margin-top: 1rem;
-  border: 1px solid var(--hairline);
-  background: rgba(26, 22, 16, 0.85);
-  padding: 1rem 1.15rem 1.15rem;
+  padding: 1.1rem 1.2rem 1.2rem;
+  border-radius: 4px 20px 4px 20px / 16px 4px 20px 4px;
+}
+
+.cal-day-drawer::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgba(41, 36, 27, 0.85);
+  border: 1.2px solid var(--hairline);
+  filter: url(#ink-wobble);
 }
 
 .cal-day-drawer header {
@@ -1250,17 +1480,17 @@ button {
   grid-template-columns: auto 1fr auto;
   gap: 0.65rem;
   align-items: center;
-  border: 1px solid var(--washi-glass-strong);
   border-left: 2px solid var(--st-neutral);
-  background: rgba(239, 230, 208, 0.03);
+  border-radius: 2px 12px 2px 12px;
+  background: rgba(244, 234, 212, 0.035);
   padding: 0.55rem 0.75rem;
   text-align: left;
   color: var(--washi);
-  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  transition: background 0.2s, transform 0.15s;
 }
 
 .cal-day-item:hover {
-  background: rgba(183, 143, 66, 0.08);
+  background: rgba(189, 149, 80, 0.08);
   transform: translateX(2px);
 }
 
@@ -1284,50 +1514,61 @@ button {
 }
 
 /* ————————————————————————————————————————————
-   Kanban
+   Kanban — four scrolls side by side
    ———————————————————————————————————————————— */
 .kanban-view {
   display: grid;
   grid-template-columns: repeat(4, minmax(200px, 1fr));
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 .kanban-col {
   position: relative;
-  overflow: hidden;
-  background: var(--ink-2);
-  border: 1px solid var(--hairline);
-  padding: 0.9rem 0.75rem;
+  padding: 1rem 0.85rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  transition: box-shadow 0.2s, border-color 0.2s;
+  border-radius: 6px 26px 6px 32px / 22px 6px 30px 8px;
+  transition: filter 0.2s;
 }
 
 .kanban-col::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--paper-panel-deep);
+  border: 1.3px solid var(--hairline);
+  box-shadow: var(--shadow-soft);
+  filter: url(#ink-wobble);
+}
+
+.kanban-col::after {
+  content: '';
+  position: absolute;
+  top: 0.55rem;
+  left: 0.7rem;
+  right: 0.7rem;
   height: 2px;
+  border-radius: 2px;
   background: var(--st-neutral);
 }
 
-.kanban-col.status-asignada::before { background: var(--st-neutral); }
-.kanban-col.status-en_proceso::before { background: var(--st-progress); }
-.kanban-col.status-completada::before { background: var(--st-done); }
-.kanban-col.status-cancelada::before { background: var(--st-cancel); }
+.kanban-col.status-asignada::after { background: var(--st-neutral); }
+.kanban-col.status-en_proceso::after { background: var(--st-progress); }
+.kanban-col.status-completada::after { background: var(--st-done); }
+.kanban-col.status-cancelada::after { background: var(--st-cancel); }
 
 .kanban-col.is-over {
-  border-color: var(--gold-hairline);
-  box-shadow: inset 0 0 0 1px var(--gold-bright), 0 0 24px rgba(183, 143, 66, 0.14);
+  filter: brightness(1.12);
 }
 
 .kanban-col header {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  margin-top: 0.35rem;
 }
 
 .kanban-col header h3 {
@@ -1341,8 +1582,9 @@ button {
   margin-left: auto;
   font-size: 0.68rem;
   color: var(--washi-dim);
+  border-radius: 999px;
   border: 1px solid var(--washi-glass-strong);
-  padding: 0.05rem 0.4rem;
+  padding: 0.05rem 0.5rem;
 }
 
 .kanban-glyph {
@@ -1355,7 +1597,7 @@ button {
 .kanban-drop {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.55rem;
   min-height: 4rem;
 }
 
@@ -1377,12 +1619,12 @@ button {
 }
 
 .kanban-card {
-  background: rgba(239, 230, 208, 0.04);
-  border: 1px solid var(--washi-glass-strong);
+  position: relative;
   border-left: 3px solid var(--st-neutral);
+  border-radius: 2px 14px 3px 16px / 12px 3px 16px 4px;
   padding: 0.65rem 0.75rem;
   cursor: grab;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: filter 0.2s, transform 0.15s;
 }
 
 .kanban-card.urg-overdue { border-left-color: var(--vermillion); }
@@ -1394,8 +1636,9 @@ button {
 }
 
 .kanban-card:hover {
-  border-color: var(--gold-hairline);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.38);
 }
 
 .kanban-card h4 {
@@ -1472,7 +1715,7 @@ button {
 }
 
 .tl-row:hover {
-  background: rgba(183, 143, 66, 0.06);
+  background: rgba(189, 149, 80, 0.06);
 }
 
 .tl-label {
@@ -1485,7 +1728,8 @@ button {
 .tl-track {
   position: relative;
   height: 1.7rem;
-  background: rgba(239, 230, 208, 0.04);
+  border-radius: 999px;
+  background: rgba(244, 234, 212, 0.04);
 }
 
 .tl-bar {
@@ -1496,8 +1740,9 @@ button {
   align-items: center;
   padding: 0 0.5rem;
   font-size: 0.68rem;
-  color: var(--ink);
+  color: var(--sumi);
   background: var(--st-neutral);
+  border-radius: 999px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1510,7 +1755,7 @@ button {
 
 .tl-bar.urg-soon {
   background: linear-gradient(90deg, var(--gold-bright), var(--gold));
-  color: var(--ink);
+  color: var(--sumi);
 }
 
 .tl-bar.urg-done {
@@ -1529,8 +1774,9 @@ button {
   min-width: 200px;
   max-width: 260px;
   padding: 0.55rem 0.7rem;
-  background: rgba(16, 13, 8, 0.96);
+  background: rgba(21, 19, 15, 0.97);
   border: 1px solid var(--gold-hairline);
+  border-radius: 3px 14px 3px 14px;
   box-shadow: var(--shadow-deep);
   font-size: 0.68rem;
   color: var(--washi-dim);
@@ -1563,7 +1809,7 @@ button {
 }
 
 /* ————————————————————————————————————————————
-   Toast, modals, drawers
+   Toast, modals, drawers — unrolled scrolls, torn top & bottom
    ———————————————————————————————————————————— */
 .toast {
   position: fixed;
@@ -1571,8 +1817,9 @@ button {
   bottom: 2rem;
   z-index: 60;
   padding: 0.75rem 1.4rem;
-  background: var(--ink-3);
+  background: var(--sumi-3);
   border: 1px solid var(--gold-hairline);
+  border-radius: 3px 16px 3px 16px;
   color: var(--washi);
   font-size: 0.82rem;
   box-shadow: var(--shadow-deep);
@@ -1582,7 +1829,7 @@ button {
   position: fixed;
   inset: 0;
   z-index: 70;
-  background: rgba(16, 13, 8, 0.72);
+  background: rgba(15, 13, 10, 0.72);
   backdrop-filter: blur(6px);
   display: grid;
   place-items: center;
@@ -1590,14 +1837,38 @@ button {
 }
 
 .modal {
+  position: relative;
   width: min(480px, 100%);
   max-height: 88vh;
   overflow-y: auto;
-  background: var(--ink-2);
-  border: 1px solid var(--gold-hairline);
-  padding: 1.75rem;
-  box-shadow: var(--shadow-deep);
+  padding: 2.1rem 1.9rem 1.9rem;
+  border-radius: 4px 30px 4px 30px / 22px 4px 30px 4px;
+  background: transparent;
 }
+
+.modal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--paper-panel-deep);
+  border: 1.3px solid var(--gold-hairline);
+  box-shadow: var(--shadow-deep);
+  filter: url(#ink-wobble);
+}
+
+.modal .torn-edge {
+  position: absolute;
+  left: 4%;
+  width: 92%;
+  height: 13px;
+  color: var(--sumi-2);
+  z-index: 2;
+}
+
+.modal .torn-edge:first-of-type { top: 0.15rem; }
+.modal .torn-edge.is-flip { bottom: 0.15rem; top: auto; }
 
 .modal-wide {
   width: min(640px, 100%);
@@ -1643,8 +1914,9 @@ button {
   place-items: center;
   padding: 2rem 1rem;
   margin: 1rem 0;
+  border-radius: 4px 20px 4px 20px / 16px 4px 20px 4px;
   border: 1px dashed var(--gold-hairline);
-  background: rgba(183, 143, 66, 0.05);
+  background: rgba(189, 149, 80, 0.05);
   cursor: pointer;
   color: var(--washi);
   font-size: 0.85rem;
@@ -1662,7 +1934,7 @@ button {
   bottom: 0;
   z-index: 75;
   width: min(440px, 100vw);
-  background: var(--ink-2);
+  background: var(--sumi-2);
   border-left: 1px solid var(--gold-hairline);
   box-shadow: var(--shadow-deep);
   display: flex;
@@ -1674,12 +1946,22 @@ button {
   position: fixed;
   inset: 0;
   z-index: 74;
-  background: rgba(16, 13, 8, 0.65);
+  background: rgba(15, 13, 10, 0.65);
 }
 
 .drawer-head {
-  padding: 1.5rem 1.5rem 1rem;
+  position: relative;
+  padding: 1.6rem 1.5rem 1.15rem;
   border-bottom: 1px solid var(--hairline);
+}
+
+.drawer-head .torn-edge {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 12px;
+  color: var(--sumi-2);
 }
 
 .drawer-kicker {
@@ -1708,12 +1990,13 @@ button {
   padding: 0.4rem 0.8rem;
   font-size: 0.7rem;
   color: var(--washi-dim);
+  border-radius: 999px;
 }
 
 .drawer-tabs button.is-active {
   color: var(--washi);
   border-color: var(--gold-hairline);
-  background: rgba(183, 143, 66, 0.1);
+  background: rgba(189, 149, 80, 0.1);
 }
 
 .drawer-notes textarea {
@@ -1795,8 +2078,7 @@ button {
 }
 
 .glass-panel {
-  background: rgba(26, 22, 16, 0.55);
-  backdrop-filter: blur(14px);
+  background: transparent;
 }
 
 .empty-hint {
@@ -1810,10 +2092,95 @@ button {
   display: block;
 }
 
-/* Reduced motion */
+/* ————————————————————————————————————————————
+   Koi pond — two ink-brush fish adrift behind everything
+   ———————————————————————————————————————————— */
+.koi-pond {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.koi-fish {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 132px;
+  height: auto;
+  opacity: 0.16;
+  color: var(--washi);
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
+  will-change: transform;
+}
+
+.koi-fish.is-vermillion {
+  color: var(--vermillion-soft);
+  opacity: 0.2;
+}
+
+.koi-fish .koi-tail {
+  transform-origin: 92px 30px;
+  animation: koi-tail 2.6s ease-in-out infinite;
+}
+
+.koi-fish-a {
+  width: 150px;
+  animation: koi-swim-a 62s linear infinite;
+}
+
+.koi-fish-b {
+  width: 108px;
+  animation: koi-swim-b 78s linear infinite;
+  animation-delay: -18s;
+}
+
+@keyframes koi-tail {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
+
+@keyframes koi-swim-a {
+  0%    { transform: translate(-16vw, 22vh) rotate(6deg) scaleX(1); }
+  18%   { transform: translate(38vw, 14vh) rotate(2deg) scaleX(1); }
+  30%   { transform: translate(66vw, 20vh) rotate(-4deg) scaleX(1); }
+  38%   { transform: translate(78vw, 19vh) rotate(-4deg) scaleX(1); }
+  46%   { transform: translate(116vw, 10vh) rotate(-8deg) scaleX(1); }
+  50%   { transform: translate(122vw, 10vh) rotate(0deg) scaleX(-1); }
+  70%   { transform: translate(58vw, 68vh) rotate(10deg) scaleX(-1); }
+  82%   { transform: translate(18vw, 74vh) rotate(4deg) scaleX(-1); }
+  90%   { transform: translate(-2vw, 70vh) rotate(4deg) scaleX(-1); }
+  100%  { transform: translate(-16vw, 22vh) rotate(6deg) scaleX(1); }
+}
+
+@keyframes koi-swim-b {
+  0%    { transform: translate(120vw, 78vh) rotate(-4deg) scaleX(-1); }
+  22%   { transform: translate(64vw, 84vh) rotate(2deg) scaleX(-1); }
+  34%   { transform: translate(40vw, 80vh) rotate(2deg) scaleX(-1); }
+  42%   { transform: translate(24vw, 88vh) rotate(6deg) scaleX(-1); }
+  50%   { transform: translate(-14vw, 86vh) rotate(0deg) scaleX(1); }
+  68%   { transform: translate(30vw, 34vh) rotate(-8deg) scaleX(1); }
+  78%   { transform: translate(70vw, 26vh) rotate(-2deg) scaleX(1); }
+  86%   { transform: translate(96vw, 30vh) rotate(-2deg) scaleX(1); }
+  100%  { transform: translate(120vw, 78vh) rotate(-4deg) scaleX(-1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .koi-fish,
+  .koi-fish .koi-tail {
+    animation: none !important;
+  }
+}
+
+/* Reduced motion (app-level toggle, mirrors the OS preference above) */
 .reduce-motion * {
   animation-duration: 0.01ms !important;
   transition-duration: 0.01ms !important;
+}
+
+.reduce-motion .koi-pond {
+  display: none;
 }
 
 /* Density */
@@ -1829,24 +2196,19 @@ button {
 }
 
 @media (max-width: 860px) {
-  .atelier {
-    grid-template-columns: 1fr;
-  }
-  .seal-rail {
-    position: relative;
+  .washi-topbar {
     height: auto;
-    flex-direction: row;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    border-right: none;
-    border-bottom: 1px solid var(--hairline);
-    overflow-x: auto;
+    flex-wrap: wrap;
+    padding: 0.7rem 0.9rem;
+    gap: 0.6rem;
   }
-  .rail-brand { flex-direction: row; gap: 0.6rem; }
-  .rail-views { flex-direction: row; width: auto; padding: 0; }
-  .rail-view { flex-direction: row; gap: 0.35rem; padding: 0.4rem 0.6rem; }
-  .rail-spacer { flex: 0 0 0.5rem; }
-  .rail-tools { flex-direction: row; }
+  .rail-views {
+    order: 3;
+    margin: 0;
+    width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
   .canvas { padding: 1.5rem 1rem 3rem; }
   .canvas-header { align-items: flex-start; }
 }
@@ -1867,4 +2229,5 @@ button {
     font-size: 0.62rem;
   }
   .rail-label { display: none; }
+  .koi-fish { opacity: 0.1; }
 }

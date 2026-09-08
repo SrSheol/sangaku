@@ -4,6 +4,29 @@
  * are procedural / hand-drawn paths tuned for this app only.
  */
 
+/**
+ * Hidden SVG filter defs shared by every "washi-frame" surface (cards,
+ * panels, modals, columns…). feTurbulence + feDisplacementMap bends a
+ * crisp rectangle into a hand-brushed, slightly wobbly outline. Mounted
+ * once near the app root; every surface references it by id.
+ */
+export function InkFilters() {
+  return (
+    <svg className="ink-defs" aria-hidden focusable="false">
+      <defs>
+        <filter id="ink-wobble" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018" numOctaves="2" seed="4" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+        <filter id="ink-wobble-sm" x="-30%" y="-30%" width="160%" height="160%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.05 0.07" numOctaves="2" seed="9" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
+  )
+}
+
 export function SealMark({ size = 44, glyph = '算' }: { size?: number; glyph?: string }) {
   const id = `seal-grain-${glyph.charCodeAt(0)}`
   return (
@@ -95,6 +118,44 @@ export function MountainWash({ className = '' }: { className?: string }) {
     <svg className={`mountain-wash ${className}`} viewBox="0 0 500 140" aria-hidden preserveAspectRatio="xMidYMax slice">
       <path d="M0 120 L70 55 L120 95 L170 40 L230 100 L280 60 L340 110 L400 50 L460 100 L500 75 L500 140 L0 140 Z" fill="var(--ink)" opacity="0.12" />
       <path d="M0 130 L90 85 L150 115 L210 70 L260 120 L330 90 L390 125 L440 95 L500 118 L500 140 L0 140 Z" fill="var(--ink)" opacity="0.2" />
+    </svg>
+  )
+}
+
+/**
+ * A single-line sumi-e brush fish (koi), original hand-authored path —
+ * no stock art. Body is one loose ink stroke; the tail is a separate
+ * group so callers can sway it independently via the `.koi-tail` class.
+ */
+export function KoiFish({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 140 60"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <path
+        d="M6 32c8-14 24-22 40-22 14 0 22 8 30 8 6 0 10-4 14-9-2 8-7 14-7 14s8 3 13 11c-6 2-12-1-16-4-6 8-16 14-30 14-18 0-38-8-44-12Z"
+        fill="currentColor"
+        opacity="0.9"
+      />
+      <path
+        d="M30 20c6 2 11 6 13 12M50 17c6 1 12 5 15 11M22 40c8 3 20 4 30 1"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+        opacity="0.5"
+      />
+      <circle cx="18" cy="28" r="1.6" fill="currentColor" opacity="0.85" />
+      <g className="koi-tail">
+        <path
+          d="M92 30c6-8 16-14 26-15-4 6-6 11-6 15s2 9 6 15c-10-1-20-7-26-15Z"
+          fill="currentColor"
+          opacity="0.75"
+        />
+      </g>
     </svg>
   )
 }

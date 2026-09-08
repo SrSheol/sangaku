@@ -53,7 +53,8 @@ import { PreferencesPanel } from './ui/PreferencesPanel'
 import { ShortcutsModal } from './ui/ShortcutsModal'
 import { TaskDetail } from './ui/TaskDetail'
 import { ListView } from './views/ListView'
-import { BrushDivider, KANJI_NUM, SealMark } from './ui/InkAssets'
+import { BrushDivider, KANJI_NUM, SealMark, TornEdge } from './ui/InkAssets'
+import { KoiPond } from './ui/KoiPond'
 
 const AmbientScene = lazy(() => import('./ui/AmbientScene'))
 const CalendarView = lazy(() => import('./views/CalendarView').then((m) => ({ default: m.CalendarView })))
@@ -369,10 +370,11 @@ export function Dashboard() {
       <CustomCursor enabled={prefs.cursor && !prefs.reduceMotion} />
       <div className="grain" aria-hidden />
       <div className="atelier-wash" aria-hidden />
+      <KoiPond paused={ambientPaused || prefs.reduceMotion} />
 
-      <aside className="seal-rail">
+      <header className="washi-topbar">
         <div className="rail-brand">
-          <SealMark size={46} />
+          <SealMark size={38} />
           <span className="rail-brand-label">算額</span>
         </div>
 
@@ -392,8 +394,6 @@ export function Dashboard() {
             </button>
           ))}
         </nav>
-
-        <div className="rail-spacer" aria-hidden />
 
         <div className="rail-tools">
           <button
@@ -434,10 +434,11 @@ export function Dashboard() {
             出
           </button>
         </div>
-      </aside>
+      </header>
 
       <main className="canvas">
-        <header className="canvas-header">
+        <header className="canvas-header scroll-panel">
+          <TornEdge />
           <div className="canvas-titling">
             <p className="canvas-eyebrow">
               算額 · Sangaku · sesión {sessionLabel}
@@ -470,6 +471,7 @@ export function Dashboard() {
               </motion.div>
             ))}
           </div>
+          <TornEdge flip />
         </header>
 
         <BrushDivider />

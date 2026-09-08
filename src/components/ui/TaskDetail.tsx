@@ -9,6 +9,7 @@ import {
   newCommentId,
 } from '../../lib/db'
 import type { Task, TaskComment, TaskHistoryEntry, TaskStatus } from '../../types'
+import { TornEdge } from './InkAssets'
 
 const HISTORY_LABELS: Record<string, string> = {
   status: 'Estado',
@@ -78,6 +79,7 @@ export function TaskDetail({
           <button type="button" className="btn-ghost" onClick={onClose}>
             Cerrar
           </button>
+          <TornEdge flip />
         </header>
 
         <div className="drawer-tabs">
