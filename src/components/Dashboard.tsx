@@ -1,19 +1,20 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from 'react'
 import { AnimatePresence, motion, useSpring, useTransform } from 'framer-motion'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useAuth } from '../auth/AuthGate'
-import { useLenis } from '../hooks/useLenis'
 import { EXPECTED_USER, GUEST_USER, loadStoredFilters, saveStoredFilters } from '../auth/session'
-import { CATEGORIES, CATEGORY_LABELS, STATUS_LABELS, STATUSES } from '../lib/constants'
-import { formatDay, urgencyLevel, daysUntilDue } from '../lib/dates'
+import { useAmbientAudio } from '../hooks/useAmbientAudio'
+import { useLenis } from '../hooks/useLenis'
+import { CATEGORIES, CATEGORY_LABELS, STATUS_LABELS, STATUSES, VIEW_LABELS } from '../lib/constants'
 import {
   computeKpis,
   filterTasks,
@@ -22,6 +23,7 @@ import {
   groupByCategory,
   loadAndReconcileTasks,
   newTaskId,
+  recordTaskHistory,
   saveLocalTasks,
   seedCount,
   seedLocalIfEmpty,
@@ -29,7 +31,34 @@ import {
   syncSeedToFirestore,
   upsertTaskRemote,
 } from '../lib/tasks'
-import type { Task, TaskCategory, TaskFilters, TaskStatus } from '../types'
+import {
+  loadPreferences,
+  loadSavedFilters,
+  loadView,
+  makeSavedFilter,
+  savePreferences,
+  saveSavedFilters,
+  saveView,
+} from '../lib/preferences'
+import type {
+  AppView,
+  Preferences,
+  SavedFilter,
+  Task,
+  TaskFilters,
+} from '../types'
+import { AddTaskModal } from './ui/AddTaskModal'
+import { CustomCursor } from './ui/CustomCursor'
+import { PreferencesPanel } from './ui/PreferencesPanel'
+import { ShortcutsModal } from './ui/ShortcutsModal'
+import { TaskDetail } from './ui/TaskDetail'
+import { ListView } from './views/ListView'
+
+const AmbientScene = lazy(() => import('./ui/AmbientScene'))
+const CalendarView = lazy(() => import('./views/CalendarView').then((m) => ({ default: m.CalendarView })))
+const KanbanView = lazy(() => import('./views/KanbanView').then((m) => ({ default: m.KanbanView })))
+const TimelineView = lazy(() => import('./views/TimelineView').then((m) => ({ default: m.TimelineView })))
+const ImportModal = lazy(() => import('./ui/ImportModal').then((m) => ({ default: m.ImportModal })))
 
 const defaultFilters: TaskFilters = {
   status: 'all',
@@ -38,8 +67,6 @@ const defaultFilters: TaskFilters = {
   sort: 'dueAsc',
   groupByCategory: true,
 }
-
-const STAGGER_LIMIT = 18
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -81,17 +108,32 @@ export function Dashboard() {
   const meta = seedMeta()
   const [tasks, setTasks] = useState<Task[]>(() => seedLocalIfEmpty())
   const [filters, setFilters] = useState<TaskFilters>(() => parseFilters(loadStoredFilters(role)))
+  const [view, setView] = useState<AppView>(() => loadView(role))
+  const [prefs, setPrefs] = useState<Preferences>(() => loadPreferences())
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => loadSavedFilters(role))
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [editingNotes, setEditingNotes] = useState<string | null>(null)
-  const [notesDraft, setNotesDraft] = useState('')
+  const [detail, setDetail] = useState<Task | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [showPrefs, setShowPrefs] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const [saveFilterName, setSaveFilterName] = useState('')
+  const [notifState, setNotifState] = useState<NotificationPermission | 'unsupported'>(() =>
+    typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
+  )
+  const [ambientPaused, setAmbientPaused] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const boardRef = useRef<HTMLDivElement>(null)
 
-  useLenis(true)
+  useLenis(!prefs.reduceMotion)
+  useAmbientAudio(prefs.sound)
 
+  useEffect(() => {
+    document.documentElement.dataset.density = prefs.density
+    document.documentElement.classList.toggle('reduce-motion', prefs.reduceMotion)
+  }, [prefs])
 
   const persist = useCallback((next: Task[]) => {
     setTasks(next)
@@ -123,12 +165,49 @@ export function Dashboard() {
   }, [filters, role])
 
   useEffect(() => {
+    saveView(role, view)
+  }, [view, role])
+
+  useEffect(() => {
+    savePreferences(prefs)
+  }, [prefs])
+
+  useEffect(() => {
+    saveSavedFilters(role, savedFilters)
+  }, [savedFilters, role])
+
+  // Keyboard shortcuts
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
       const tag = (e.target as HTMLElement | null)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      e.preventDefault()
-      searchRef.current?.focus()
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+      if (e.key === 'Escape') {
+        setDetail(null)
+        setShowShortcuts(false)
+        setShowPrefs(false)
+        return
+      }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) {
+        if (e.key === '/' && !typing) {
+          e.preventDefault()
+          searchRef.current?.focus()
+        }
+        return
+      }
+      if (e.key === '/') {
+        e.preventDefault()
+        searchRef.current?.focus()
+        return
+      }
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault()
+        setShowShortcuts(true)
+        return
+      }
+      if (e.key === '1') setView('list')
+      if (e.key === '2') setView('calendar')
+      if (e.key === '3') setView('kanban')
+      if (e.key === '4') setView('timeline')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -143,25 +222,14 @@ export function Dashboard() {
     return { completed: done, active: rest }
   }, [filtered])
 
-  const activeGroups = useMemo(
-    () =>
-      filters.groupByCategory && !isGuest
-        ? groupByCategory(active)
-        : [{ category: 'all', tasks: active }],
-    [active, filters.groupByCategory, isGuest],
-  )
-
-  // Guest: also allow groupByCategory on actives if they toggle it
-  const guestActiveGroups = useMemo(
+  const displayActiveGroups = useMemo(
     () =>
       filters.groupByCategory ? groupByCategory(active) : [{ category: 'all', tasks: active }],
     [active, filters.groupByCategory],
   )
 
-  const displayActiveGroups = isGuest ? guestActiveGroups : activeGroups
-
   useEffect(() => {
-    if (loading || !boardRef.current) return
+    if (loading || !boardRef.current || prefs.reduceMotion || view !== 'list') return
     const sections = boardRef.current.querySelectorAll('.reveal-section')
     const triggers: ScrollTrigger[] = []
     sections.forEach((el) => {
@@ -186,17 +254,24 @@ export function Dashboard() {
     return () => {
       triggers.forEach((t) => t.kill())
     }
-  }, [loading, filtered.length, filters.groupByCategory, filters.status])
+  }, [loading, filtered.length, filters.groupByCategory, filters.status, prefs.reduceMotion, view])
 
-
-  const updateTask = async (id: string, patch: Partial<Task>) => {
+  const updateTask = async (id: string, patch: Partial<Task>, historyKind?: 'status' | 'notes' | 'edit') => {
     if (!isAdmin) return
+    const prev = tasks.find((t) => t.id === id)
     const next = tasks.map((t) =>
       t.id === id ? { ...t, ...patch, updatedAt: new Date().toISOString() } : t,
     )
     persist(next)
     const updated = next.find((t) => t.id === id)
     if (updated) void upsertTaskRemote(updated)
+    if (prev && historyKind === 'status' && patch.status && patch.status !== prev.status) {
+      void recordTaskHistory(id, 'status', 'Sheol', STATUS_LABELS[prev.status], STATUS_LABELS[patch.status])
+    }
+    if (prev && historyKind === 'notes') {
+      void recordTaskHistory(id, 'notes', 'Sheol', prev.notes || '—', patch.notes || '—')
+    }
+    if (detail?.id === id && updated) setDetail(updated)
   }
 
   const handleSeedLocal = () => {
@@ -239,20 +314,57 @@ export function Dashboard() {
     const next = [task, ...tasks]
     persist(next)
     void upsertTaskRemote(task)
+    void recordTaskHistory(task.id, 'created', 'Sheol', undefined, task.activity)
     setShowAdd(false)
     setToast('Tarea añadida')
   }
 
+  const requestNotif = async () => {
+    if (typeof Notification === 'undefined') {
+      setNotifState('unsupported')
+      return
+    }
+    const perm = await Notification.requestPermission()
+    setNotifState(perm)
+    if (perm === 'granted') {
+      const soon = tasks.filter((t) => {
+        if (t.status === 'completada' || t.status === 'cancelada') return false
+        const d = t.dueAt
+        if (!d) return false
+        const days = Math.ceil((Date.parse(d) - Date.now()) / 86400000)
+        return days >= 0 && days <= 7
+      })
+      new Notification('Sangaku', {
+        body:
+          soon.length > 0
+            ? `${soon.length} tarea(s) por vencer en ≤7 días`
+            : 'Recordatorios activos · sin vencimientos próximos',
+      })
+    }
+  }
+
   const sessionLabel = isGuest ? GUEST_USER : EXPECTED_USER
+  const showCompletedSection =
+    filters.status !== 'asignada' && filters.status !== 'en_proceso' && filters.status !== 'cancelada'
+  const showActiveSection =
+    filters.status === 'all' ||
+    filters.status === 'asignada' ||
+    filters.status === 'en_proceso' ||
+    filters.status === 'cancelada'
 
   return (
     <motion.div
       className="app-shell"
-      initial={{ opacity: 0 }}
+      initial={prefs.reduceMotion ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
+      <Suspense fallback={null}>
+        <AmbientScene paused={ambientPaused || prefs.reduceMotion} />
+      </Suspense>
+      <CustomCursor enabled={prefs.cursor && !prefs.reduceMotion} />
       <div className="grain" aria-hidden />
+
       <header className="topbar">
         <div className="brand-block">
           <span className="brand-mark" aria-hidden />
@@ -260,17 +372,34 @@ export function Dashboard() {
             <h1>
               Sangaku <span className="jp">算額</span>
             </h1>
-            <p>Pendientes · {tasks.length} tareas</p>
+            <p>Pendientes · {tasks.length} tareas · badge {meta.badge}</p>
           </div>
         </div>
         <div className="topbar-actions">
           <span className="user-chip" title="Sesión activa">
             Sesión · {sessionLabel}
           </span>
+          <button
+            type="button"
+            className="btn-ghost"
+            title="Pausar fondo 3D"
+            onClick={() => setAmbientPaused((p) => !p)}
+          >
+            {ambientPaused ? 'Fondo' : 'Pausar 3D'}
+          </button>
+          <button type="button" className="btn-ghost" onClick={() => setShowPrefs(true)}>
+            Preferencias
+          </button>
+          <button type="button" className="btn-ghost" onClick={() => setShowShortcuts(true)}>
+            ?
+          </button>
           {isAdmin && (
             <>
               <button type="button" className="btn-ghost" onClick={() => setShowAdd(true)}>
                 + Tarea
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => setShowImport(true)}>
+                Importar
               </button>
               <button type="button" className="btn-ghost" onClick={handleSeedLocal}>
                 Cargar seed
@@ -320,7 +449,7 @@ export function Dashboard() {
           <motion.article
             key={k.label}
             className={`kpi-card tone-${k.tone}`}
-            initial={{ opacity: 0, y: 16 }}
+            initial={prefs.reduceMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           >
@@ -330,11 +459,21 @@ export function Dashboard() {
         ))}
       </section>
 
-      <motion.section
-        className="filters glass-panel"
-        layout
-        transition={{ duration: 0.25 }}
-      >
+      <nav className="view-switch glass-panel" aria-label="Vistas">
+        {(Object.keys(VIEW_LABELS) as AppView[]).map((v) => (
+          <button
+            key={v}
+            type="button"
+            className={view === v ? 'is-active' : ''}
+            onClick={() => setView(v)}
+          >
+            <span className="view-num">{v === 'list' ? '1' : v === 'calendar' ? '2' : v === 'kanban' ? '3' : '4'}</span>
+            {VIEW_LABELS[v]}
+          </button>
+        ))}
+      </nav>
+
+      <motion.section className="filters glass-panel" layout transition={{ duration: 0.25 }}>
         <input
           ref={searchRef}
           className="search"
@@ -386,8 +525,43 @@ export function Dashboard() {
             checked={filters.groupByCategory}
             onChange={(e) => setFilters((f) => ({ ...f, groupByCategory: e.target.checked }))}
           />
-          Agrupar por categoría
+          Agrupar
         </label>
+        <div className="saved-filters">
+          <select
+            value=""
+            onChange={(e) => {
+              const sf = savedFilters.find((x) => x.id === e.target.value)
+              if (sf) setFilters(sf.filters)
+            }}
+          >
+            <option value="">Filtros guardados…</option>
+            {savedFilters.map((sf) => (
+              <option key={sf.id} value={sf.id}>
+                {sf.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="save-filter-name"
+            placeholder="Nombre preset"
+            value={saveFilterName}
+            onChange={(e) => setSaveFilterName(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={!saveFilterName.trim()}
+            onClick={() => {
+              const sf = makeSavedFilter(saveFilterName, filters)
+              setSavedFilters((list) => [...list, sf])
+              setSaveFilterName('')
+              setToast(`Filtro «${sf.name}» guardado`)
+            }}
+          >
+            Guardar filtro
+          </button>
+        </div>
         <p className="filter-count">
           {filtered.length} / {tasks.length}
         </p>
@@ -414,88 +588,48 @@ export function Dashboard() {
           </motion.div>
         ) : (
           <AnimatePresence mode="wait">
-            {completed.length > 0 && filters.status !== 'asignada' && filters.status !== 'en_proceso' && filters.status !== 'cancelada' && (
-              <motion.section
-                key="completed"
-                className="category-block section-completed reveal-section"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-              >
-                <h2 className="category-title section-divider">
-                  <span className="hairline" />
-                  Completadas
-                  <span className="count">{completed.length}</span>
-                </h2>
-                <div className="card-list">
-                  {completed.map((task, idx) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      index={idx}
-                      readOnly={isGuest}
-                      onStatus={(status) => void updateTask(task.id, { status })}
-                      onDone={() => void updateTask(task.id, { status: 'completada' })}
-                      onEditNotes={() => {
-                        if (isGuest) return
-                        setEditingNotes(task.id)
-                        setNotesDraft(task.notes ?? '')
-                      }}
-                    />
-                  ))}
-                </div>
-              </motion.section>
-            )}
-
-            {(filters.status === 'all' ||
-              filters.status === 'asignada' ||
-              filters.status === 'en_proceso' ||
-              filters.status === 'cancelada') &&
-              active.length > 0 && (
-                <motion.section
-                  key="active-wrap"
-                  className="category-block reveal-section"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  {completed.length > 0 &&
-                    filters.status === 'all' && (
-                      <h2 className="category-title section-divider">
-                        <span className="hairline" />
-                        Activas
-                        <span className="count">{active.length}</span>
-                      </h2>
-                    )}
-                  {displayActiveGroups.map((g) => (
-                    <div key={g.category} className="category-sub">
-                      {filters.groupByCategory && g.category !== 'all' && (
-                        <h3 className="category-title nested">
-                          <span className="hairline" />
-                          {CATEGORY_LABELS[g.category as TaskCategory] ?? g.category}
-                          <span className="count">{g.tasks.length}</span>
-                        </h3>
-                      )}
-                      <div className="card-list">
-                        {g.tasks.map((task, idx) => (
-                          <TaskCard
-                            key={task.id}
-                            task={task}
-                            index={idx}
-                            readOnly={isGuest}
-                            onStatus={(status) => void updateTask(task.id, { status })}
-                            onDone={() => void updateTask(task.id, { status: 'completada' })}
-                            onEditNotes={() => {
-                              if (isGuest) return
-                              setEditingNotes(task.id)
-                              setNotesDraft(task.notes ?? '')
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </motion.section>
+            <motion.div
+              key={view}
+              initial={prefs.reduceMotion ? false : { opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={prefs.reduceMotion ? undefined : { opacity: 0, y: -6 }}
+              transition={{ duration: 0.35 }}
+            >
+              {view === 'list' && (
+                <ListView
+                  completed={isGuest ? completed : completed}
+                  activeGroups={displayActiveGroups}
+                  groupByCategory={filters.groupByCategory}
+                  showCompletedSection={showCompletedSection}
+                  showActiveSection={showActiveSection && active.length > 0}
+                  readOnly={isGuest}
+                  density={prefs.density}
+                  onStatus={(id, s) => void updateTask(id, { status: s }, 'status')}
+                  onDone={(id) => void updateTask(id, { status: 'completada' }, 'status')}
+                  onOpen={setDetail}
+                />
               )}
+              {view === 'calendar' && (
+                <Suspense fallback={<div className="skeleton-list"><div className="skeleton-card" /></div>}>
+                  <CalendarView tasks={filtered} onOpen={setDetail} />
+                </Suspense>
+              )}
+              {view === 'kanban' && (
+                <Suspense fallback={<div className="skeleton-list"><div className="skeleton-card" /></div>}>
+                  <KanbanView
+                    tasks={filtered}
+                    readOnly={isGuest}
+                    onStatus={(id, s) => void updateTask(id, { status: s }, 'status')}
+                    onOpen={setDetail}
+                  />
+                </Suspense>
+              )}
+              {view === 'timeline' && (
+                <Suspense fallback={<div className="skeleton-list"><div className="skeleton-card" /></div>}>
+                  <TimelineView tasks={filtered} onOpen={setDetail} />
+                </Suspense>
+              )}
+            </motion.div>
           </AnimatePresence>
         )}
       </div>
@@ -514,260 +648,49 @@ export function Dashboard() {
         )}
       </AnimatePresence>
 
-      {isAdmin && editingNotes && (
-        <Modal title="Notas" onClose={() => setEditingNotes(null)}>
-          <textarea
-            rows={5}
-            value={notesDraft}
-            onChange={(e) => setNotesDraft(e.target.value)}
-            placeholder="Añadir notas internas…"
+      <AnimatePresence>
+        {detail && (
+          <TaskDetail
+            key={detail.id}
+            task={detail}
+            readOnly={isGuest}
+            onClose={() => setDetail(null)}
+            onStatus={(s) => void updateTask(detail.id, { status: s }, 'status')}
+            onSaveNotes={(notes) => {
+              void updateTask(detail.id, { notes }, 'notes')
+              setToast('Notas guardadas')
+            }}
           />
-          <div className="modal-actions">
-            <button type="button" className="btn-ghost" onClick={() => setEditingNotes(null)}>
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="btn-seal btn-seal-sm"
-              onClick={() => {
-                void updateTask(editingNotes, { notes: notesDraft.trim() })
-                setEditingNotes(null)
-                setToast('Notas guardadas')
-              }}
-            >
-              Guardar
-            </button>
-          </div>
-        </Modal>
-      )}
+        )}
+      </AnimatePresence>
 
       {isAdmin && showAdd && <AddTaskModal onClose={() => setShowAdd(false)} onSave={handleAdd} />}
-    </motion.div>
-  )
-}
-
-function TaskCard({
-  task,
-  index,
-  readOnly,
-  onStatus,
-  onDone,
-  onEditNotes,
-}: {
-  task: Task
-  index: number
-  readOnly?: boolean
-  onStatus: (s: TaskStatus) => void
-  onDone: () => void
-  onEditNotes: () => void
-}) {
-  const urg = urgencyLevel(task.dueAt, task.status)
-  const days = daysUntilDue(task.dueAt)
-  const stagger = index < STAGGER_LIMIT ? index * 0.028 : 0
-  const done = task.status === 'completada'
-
-  return (
-    <motion.article
-      className={`task-card urg-${urg}${done ? ' is-done' : ''}${readOnly ? ' is-readonly' : ''}`}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: stagger, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={
-        readOnly
-          ? undefined
-          : {
-              y: -2,
-              transition: { duration: 0.25 },
-            }
-      }
-    >
-      <div className="card-main">
-        <div className="card-top">
-          <span className="ot-badge">OT {task.ot}</span>
-          <motion.span
-            key={task.status}
-            className={`status-pill status-${task.status}`}
-            initial={{ scale: 0.85, opacity: 0.6 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 22 }}
-          >
-            {STATUS_LABELS[task.status]}
-          </motion.span>
-          {done && <span className="check-seal" aria-hidden>✓</span>}
-        </div>
-        <h3 className={done ? 'struck' : undefined}>{task.activity}</h3>
-        <div className="card-meta">
-          <div className="meta-row">
-            <span className="meta-label">Vence</span>
-            <span className={`due due-${urg}`}>
-              {formatDay(task.dueAt)}
-              {days !== null && urg !== 'done' && (
-                <em>
-                  {' '}
-                  ·{' '}
-                  {days < 0
-                    ? `${Math.abs(days)}d vencida`
-                    : days === 0
-                      ? 'hoy'
-                      : `${days}d`}
-                </em>
-              )}
-            </span>
-          </div>
-          <div className="meta-row">
-            <span className="meta-label">Asignó</span>
-            <span>{task.assigner}</span>
-          </div>
-          <div className="meta-row">
-            <span className="meta-label">Asignada</span>
-            <span>{formatDay(task.assignedAt)}</span>
-          </div>
-        </div>
-        {task.notes && <p className="notes-preview">{task.notes}</p>}
-      </div>
-      {!readOnly && (
-        <div className="card-actions">
-          <select
-            value={task.status}
-            onChange={(e) => onStatus(e.target.value as TaskStatus)}
-            aria-label="Cambiar estado"
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="btn-ghost" onClick={onEditNotes}>
-            Notas
-          </button>
-          {task.status !== 'completada' && (
-            <button type="button" className="btn-seal btn-seal-sm" onClick={onDone}>
-              Hecha
-            </button>
-          )}
-        </div>
+      {isAdmin && showImport && (
+        <Suspense fallback={null}>
+          <ImportModal
+            existing={tasks}
+            meta={{ collaborator: meta.collaborator, badge: meta.badge }}
+            onClose={() => setShowImport(false)}
+            onImported={(next, msg) => {
+              persist(next)
+              void (async () => {
+                for (const task of next) await upsertTaskRemote(task)
+              })()
+              setToast(msg)
+            }}
+          />
+        </Suspense>
       )}
-    </motion.article>
-  )
-}
-
-function Modal({
-  title,
-  children,
-  onClose,
-}: {
-  title: string
-  children: ReactNode
-  onClose: () => void
-}) {
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <motion.div
-        className="modal glass-panel"
-        role="dialog"
-        aria-modal
-        aria-label={title}
-        initial={{ opacity: 0, y: 16, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2>{title}</h2>
-        {children}
-      </motion.div>
-    </div>
-  )
-}
-
-function AddTaskModal({
-  onClose,
-  onSave,
-}: {
-  onClose: () => void
-  onSave: (draft: Omit<Task, 'id' | 'collaborator' | 'badge'>) => void
-}) {
-  const today = new Date().toISOString().slice(0, 10)
-  const [activity, setActivity] = useState('')
-  const [ot, setOt] = useState('')
-  const [category, setCategory] = useState<TaskCategory>('revision')
-  const [status, setStatus] = useState<TaskStatus>('asignada')
-  const [dueAt, setDueAt] = useState(today)
-  const [assignedAt, setAssignedAt] = useState(today)
-  const [assigner, setAssigner] = useState('Judith Díaz de la Vega Ponce')
-  const [notes, setNotes] = useState('')
-
-  return (
-    <Modal title="Nueva tarea" onClose={onClose}>
-      <div className="form-grid">
-        <label>
-          Actividad
-          <input value={activity} onChange={(e) => setActivity(e.target.value)} required />
-        </label>
-        <label>
-          OT
-          <input value={ot} onChange={(e) => setOt(e.target.value)} required />
-        </label>
-        <label>
-          Categoría
-          <select value={category} onChange={(e) => setCategory(e.target.value as TaskCategory)}>
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Estado
-          <select value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)}>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Asignada
-          <input type="date" value={assignedAt} onChange={(e) => setAssignedAt(e.target.value)} />
-        </label>
-        <label>
-          Vence
-          <input type="date" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
-        </label>
-        <label className="span-2">
-          Asignador
-          <input value={assigner} onChange={(e) => setAssigner(e.target.value)} />
-        </label>
-        <label className="span-2">
-          Notas
-          <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </label>
-      </div>
-      <div className="modal-actions">
-        <button type="button" className="btn-ghost" onClick={onClose}>
-          Cancelar
-        </button>
-        <button
-          type="button"
-          className="btn-seal btn-seal-sm"
-          disabled={!activity.trim() || !ot.trim()}
-          onClick={() =>
-            onSave({
-              activity: activity.trim(),
-              ot: ot.trim(),
-              category,
-              status,
-              assignedAt,
-              dueAt,
-              assigner: assigner.trim() || '—',
-              notes: notes.trim() || undefined,
-            })
-          }
-        >
-          Crear
-        </button>
-      </div>
-    </Modal>
+      {showPrefs && (
+        <PreferencesPanel
+          prefs={prefs}
+          onChange={setPrefs}
+          onClose={() => setShowPrefs(false)}
+          onRequestNotif={() => void requestNotif()}
+          notifState={notifState}
+        />
+      )}
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+    </motion.div>
   )
 }

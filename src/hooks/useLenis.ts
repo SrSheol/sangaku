@@ -5,7 +5,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 gsap.registerPlugin(ScrollTrigger)
 
-/** Smooth scroll via Lenis, wired to GSAP ScrollTrigger. Main app only. */
+/** Smooth scroll via Lenis, wired to GSAP ScrollTrigger. Respects reduceMotion. */
 export function useLenis(enabled = true) {
   useEffect(() => {
     if (!enabled) return

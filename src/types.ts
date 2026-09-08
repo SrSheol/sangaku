@@ -42,3 +42,41 @@ export interface TaskFilters {
   sort: SortKey
   groupByCategory: boolean
 }
+
+export type AppView = 'list' | 'calendar' | 'kanban' | 'timeline'
+
+export type Density = 'comfortable' | 'compact'
+
+export interface Preferences {
+  reduceMotion: boolean
+  cursor: boolean
+  sound: boolean
+  density: Density
+}
+
+export interface SavedFilter {
+  id: string
+  name: string
+  filters: TaskFilters
+  createdAt: string
+}
+
+export type HistoryKind = 'status' | 'notes' | 'edit' | 'created' | 'import'
+
+export interface TaskHistoryEntry {
+  id: string
+  taskId: string
+  at: string
+  kind: HistoryKind
+  from?: string
+  to?: string
+  by: string
+}
+
+export interface TaskComment {
+  id: string
+  taskId: string
+  at: string
+  text: string
+  by: string
+}

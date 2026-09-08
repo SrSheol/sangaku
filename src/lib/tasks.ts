@@ -8,12 +8,20 @@ import {
 import seedFile from '../data/seed-tasks.json' with { type: 'json' }
 import { db } from '../firebase'
 import { FIRESTORE_COLLECTION, STORAGE_KEY } from './constants'
+import {
+  idbLoadTasks,
+  idbSaveTasks,
+  migrateFromLocalStorage,
+  newHistoryId,
+  idbAddHistory,
+} from './db'
 import type { SeedFile, Task, TaskFilters, TaskStatus } from '../types'
 import { daysUntilDue, todayInMexico, urgencyLevel } from './dates'
 
 const seed = seedFile as SeedFile
 const BATCH_CHUNK = 400
 
+/** Sync mirror — prefer IndexedDB; keep localStorage for migration. */
 export function loadLocalTasks(): Task[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -31,6 +39,11 @@ export function saveLocalTasks(tasks: Task[]): void {
   } catch {
     // ignore quota
   }
+  void idbSaveTasks(tasks)
+}
+
+export async function saveTasksPrimary(tasks: Task[]): Promise<void> {
+  await idbSaveTasks(tasks)
 }
 
 export function seedLocalIfEmpty(): Task[] {
@@ -133,28 +146,28 @@ export async function upsertTaskRemote(task: Task): Promise<boolean> {
 }
 
 /**
- * On load: merge remote + local + seed.
- * If merged count < seed count, fill missing seed tasks, persist local,
- * and upsert missing docs to Firestore.
+ * On load: IndexedDB (migrated) + remote + seed merge.
+ * Never wipe 172 with a tiny remote subset.
  */
 export async function loadAndReconcileTasks(
   localOverride?: Task[],
 ): Promise<{ tasks: Task[]; toast: string }> {
-  const local = localOverride ?? loadLocalTasks()
+  const migrated = await migrateFromLocalStorage()
+  const fromIdb = migrated.length > 0 ? migrated : await idbLoadTasks()
+  const local = localOverride ?? (fromIdb.length > 0 ? fromIdb : loadLocalTasks())
   const seededLocal = local.length > 0 ? local : getSeedTasks()
-  if (local.length === 0) saveLocalTasks(seededLocal)
+  if (local.length === 0) await idbSaveTasks(seededLocal)
 
   const remote = await fetchFirestoreTasks()
   const seedTasks = getSeedTasks()
   const expected = seedTasks.length
 
-  // Never replace with a tiny remote subset — always merge
   let merged = mergeTaskSets(remote ?? [], seededLocal, seedTasks)
 
   const missingSeed = seedTasks.filter((s) => !merged.some((m) => m.id === s.id))
   if (merged.length < expected && missingSeed.length > 0) {
     merged = mergeTaskSets(merged, missingSeed)
-    saveLocalTasks(merged)
+    await idbSaveTasks(merged)
     try {
       await writeTasksBatch(missingSeed, 'merge')
     } catch {
@@ -166,7 +179,7 @@ export async function loadAndReconcileTasks(
     }
   }
 
-  saveLocalTasks(merged)
+  await idbSaveTasks(merged)
 
   if (remote === null) {
     return { tasks: merged, toast: 'Modo local (Firestore no disponible)' }
@@ -183,10 +196,6 @@ export async function loadAndReconcileTasks(
   return { tasks: merged, toast: '' }
 }
 
-/**
- * Carga seed a Firestore: si vacío, escribe todo;
- * si hay docs pero count < seed, añade solo ids faltantes (no se niega).
- */
 export async function syncSeedToFirestore(): Promise<{
   ok: boolean
   count: number
@@ -199,7 +208,7 @@ export async function syncSeedToFirestore(): Promise<{
 
     if (snap.empty) {
       await writeTasksBatch(tasks, 'overwrite')
-      saveLocalTasks(tasks)
+      await idbSaveTasks(tasks)
       return {
         ok: true,
         count: tasks.length,
@@ -217,8 +226,8 @@ export async function syncSeedToFirestore(): Promise<{
     }
 
     await writeTasksBatch(missing, 'merge')
-    const local = mergeTaskSets(loadLocalTasks(), tasks)
-    saveLocalTasks(local)
+    const local = mergeTaskSets(await idbLoadTasks(), tasks)
+    await idbSaveTasks(local)
     return {
       ok: true,
       count: missing.length,
@@ -237,7 +246,7 @@ export async function forceReseedAll(): Promise<{
   message: string
 }> {
   const tasks = getSeedTasks()
-  saveLocalTasks(tasks)
+  await idbSaveTasks(tasks)
   try {
     await writeTasksBatch(tasks, 'overwrite')
     return {
@@ -351,4 +360,22 @@ export function newTaskId(existing: Task[]): string {
     if (m) max = Math.max(max, Number(m[1]))
   }
   return `t-${String(max + 1).padStart(3, '0')}`
+}
+
+export async function recordTaskHistory(
+  taskId: string,
+  kind: 'status' | 'notes' | 'edit' | 'created' | 'import',
+  by: string,
+  from?: string,
+  to?: string,
+): Promise<void> {
+  await idbAddHistory({
+    id: newHistoryId(),
+    taskId,
+    at: new Date().toISOString(),
+    kind,
+    from,
+    to,
+    by,
+  })
 }
