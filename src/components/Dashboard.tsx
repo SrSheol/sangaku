@@ -14,9 +14,9 @@ import { useAuth } from '../auth/AuthGate'
 import { EXPECTED_USER, GUEST_USER, loadStoredFilters, saveStoredFilters } from '../auth/session'
 import { useAmbientAudio } from '../hooks/useAmbientAudio'
 import { useLenis } from '../hooks/useLenis'
-import { CATEGORIES, CATEGORY_LABELS, STATUS_LABELS, STATUSES, VIEW_LABELS } from '../lib/constants'
+import { CATEGORIES, CATEGORY_LABELS, STATUS_LABELS, STATUSES, VIEW_GLYPHS, VIEW_HINTS, VIEW_LABELS } from '../lib/constants'
 import {
-  computeKpis,
+  computeTempleCounts,
   filterTasks,
   forceLoadSeedLocal,
   forceReseedAll,
@@ -53,7 +53,8 @@ import { PreferencesPanel } from './ui/PreferencesPanel'
 import { ShortcutsModal } from './ui/ShortcutsModal'
 import { TaskDetail } from './ui/TaskDetail'
 import { ListView } from './views/ListView'
-import { BrushDivider, KANJI_NUM, SealMark, TornEdge } from './ui/InkAssets'
+import { UrgencyBoard } from './views/UrgencyBoard'
+import { BrushDivider, SealMark, TornEdge } from './ui/InkAssets'
 import { KoiPond } from './ui/KoiPond'
 
 const AmbientScene = lazy(() => import('./ui/AmbientScene'))
@@ -67,7 +68,7 @@ const defaultFilters: TaskFilters = {
   category: 'all',
   search: '',
   sort: 'dueAsc',
-  groupByCategory: true,
+  groupByCategory: false,
 }
 
 gsap.registerPlugin(ScrollTrigger)
@@ -81,11 +82,31 @@ function parseFilters(raw: string | null): TaskFilters {
       category: parsed.category ?? 'all',
       search: typeof parsed.search === 'string' ? parsed.search : '',
       sort: parsed.sort ?? 'dueAsc',
-      groupByCategory: typeof parsed.groupByCategory === 'boolean' ? parsed.groupByCategory : true,
+      groupByCategory: typeof parsed.groupByCategory === 'boolean' ? parsed.groupByCategory : false,
     }
   } catch {
     return defaultFilters
   }
+}
+
+function greeting(): string {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: 'America/Mexico_City' }).format(
+      new Date(),
+    ),
+  )
+  if (hour < 12) return 'Buenos días'
+  if (hour < 19) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
+function todayLabel(): string {
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone: 'America/Mexico_City',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date())
 }
 
 function CountUp({ value }: { value: number }) {
@@ -127,6 +148,7 @@ export function Dashboard() {
   )
   const [ambientPaused, setAmbientPaused] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [refineOpen, setRefineOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const boardRef = useRef<HTMLDivElement>(null)
 
@@ -216,7 +238,7 @@ export function Dashboard() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const kpis = useMemo(() => computeKpis(tasks), [tasks])
+  const temple = useMemo(() => computeTempleCounts(tasks), [tasks])
   const filtered = useMemo(() => filterTasks(tasks, filters), [tasks, filters])
 
   const { completed, active } = useMemo(() => {
@@ -355,7 +377,7 @@ export function Dashboard() {
     filters.status === 'en_proceso' ||
     filters.status === 'cancelada'
 
-  const viewIndex: Record<AppView, number> = { list: 1, calendar: 2, kanban: 3, timeline: 4 }
+  const progressPct = temple.total > 0 ? Math.round((temple.closed / temple.total) * 100) : 0
 
   return (
     <motion.div
@@ -378,22 +400,7 @@ export function Dashboard() {
           <span className="rail-brand-label">算額</span>
         </div>
 
-        <nav className="rail-views" aria-label="Vistas">
-          {(Object.keys(VIEW_LABELS) as AppView[]).map((v) => (
-            <button
-              key={v}
-              type="button"
-              className={`rail-view${view === v ? ' is-active' : ''}`}
-              onClick={() => setView(v)}
-              title={VIEW_LABELS[v]}
-            >
-              <span className="rail-num" aria-hidden>
-                {KANJI_NUM[viewIndex[v]]}
-              </span>
-              <span className="rail-label">{VIEW_LABELS[v]}</span>
-            </button>
-          ))}
-        </nav>
+        <div className="rail-spacer" aria-hidden />
 
         <div className="rail-tools">
           <button
@@ -424,7 +431,7 @@ export function Dashboard() {
             <button
               type="button"
               className={`rail-tool${toolsOpen ? ' is-active' : ''}`}
-              title="Herramientas del taller"
+              title="Rito del taller"
               onClick={() => setToolsOpen((o) => !o)}
             >
               蔵
@@ -445,19 +452,20 @@ export function Dashboard() {
               {isGuest && <span className="eyebrow-guest"> · invitado</span>}
             </p>
             <h1 className="canvas-title">
-              Templo de <em>pendientes</em>
+              {greeting()}, es <em>{todayLabel()}</em>
             </h1>
             <p className="canvas-sub">
-              {tasks.length} tareas registradas · badge {meta.badge}
+              {temple.overdue > 0
+                ? `El sello de vencidas pide atención primero · ${tasks.length} tareas en el templo`
+                : `El templo está en calma · ${tasks.length} tareas registradas · badge ${meta.badge}`}
             </p>
           </div>
-          <div className="stamp-row" aria-label="Resumen">
+          <div className="stamp-row" aria-label="Resumen del día">
             {[
-              { label: 'Total', value: kpis.total, tone: 'ink' },
-              { label: 'Vencidas', value: kpis.vencidas, tone: 'crimson' },
-              { label: 'Por vencer', value: kpis.porVencer, tone: 'copper' },
-              { label: 'En proceso', value: kpis.enProceso, tone: 'gold' },
-              { label: 'Completas', value: kpis.completadas, tone: 'ivory' },
+              { label: 'Vencidas', value: temple.overdue, tone: 'crimson' },
+              { label: 'Hoy', value: temple.today, tone: 'gold' },
+              { label: 'Esta semana', value: temple.week, tone: 'copper' },
+              { label: 'Cerradas hoy', value: temple.closedToday, tone: 'ivory' },
             ].map((k, i) => (
               <motion.div
                 key={k.label}
@@ -471,8 +479,32 @@ export function Dashboard() {
               </motion.div>
             ))}
           </div>
+          <div className="progress-scroll" aria-label={`${progressPct}% del templo cerrado`}>
+            <div className="progress-scroll-fill" style={{ width: `${loading ? 0 : progressPct}%` }} />
+            <span className="progress-scroll-label">
+              {loading ? 'Leyendo el templo…' : `${progressPct}% del templo cerrado · ${temple.closed}/${temple.total}`}
+            </span>
+          </div>
           <TornEdge flip />
         </header>
+
+        <nav className="lens-strip" aria-label="Cambiar de lente">
+          {(Object.keys(VIEW_LABELS) as AppView[]).map((v) => (
+            <button
+              key={v}
+              type="button"
+              className={`lens-btn${view === v ? ' is-active' : ''}`}
+              onClick={() => setView(v)}
+              title={VIEW_LABELS[v]}
+            >
+              <span className="lens-glyph" aria-hidden>
+                {VIEW_GLYPHS[v]}
+              </span>
+              {VIEW_LABELS[v]}
+            </button>
+          ))}
+          <span className="lens-hint">{VIEW_HINTS[view]}</span>
+        </nav>
 
         <BrushDivider />
 
@@ -495,46 +527,80 @@ export function Dashboard() {
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             >
-              <p className="tools-kicker">蔵 · herramientas del taller</p>
-              <div className="tools-actions">
-                <button type="button" className="btn-ghost" onClick={() => setShowAdd(true)}>
-                  + Tarea
-                </button>
-                <button type="button" className="btn-ghost" onClick={() => setShowImport(true)}>
-                  Importar CSV / Excel
-                </button>
-                <button type="button" className="btn-ghost" onClick={handleSeedLocal}>
-                  Cargar seed
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  disabled={busy}
-                  onClick={() => void handleForceReseed()}
-                >
-                  {busy ? 'Restaurando…' : `Restaurar ${seedCount()}`}
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  disabled={busy}
-                  onClick={() => void handleSyncFirestore()}
-                >
-                  {busy ? 'Sincronizando…' : 'Sync Firestore'}
-                </button>
+              <p className="tools-kicker">蔵 · rito del taller</p>
+              <div className="tools-group">
+                <p className="tools-group-label">① Registrar</p>
+                <div className="tools-actions">
+                  <button type="button" className="btn-ghost" onClick={() => setShowAdd(true)}>
+                    + Tarea
+                  </button>
+                  <button type="button" className="btn-ghost" onClick={() => setShowImport(true)}>
+                    Importar CSV / Excel
+                  </button>
+                </div>
+              </div>
+              <div className="tools-group">
+                <p className="tools-group-label">② Restaurar</p>
+                <div className="tools-actions">
+                  <button type="button" className="btn-ghost" onClick={handleSeedLocal}>
+                    Cargar seed
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => void handleForceReseed()}
+                  >
+                    {busy ? 'Restaurando…' : `Restaurar ${seedCount()}`}
+                  </button>
+                </div>
+              </div>
+              <div className="tools-group">
+                <p className="tools-group-label">③ Sincronía</p>
+                <div className="tools-actions">
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    disabled={busy}
+                    onClick={() => void handleSyncFirestore()}
+                  >
+                    {busy ? 'Sincronizando…' : 'Sync Firestore'}
+                  </button>
+                </div>
               </div>
             </motion.section>
           )}
         </AnimatePresence>
 
-        <motion.section className="scroll-fold filters" layout transition={{ duration: 0.25 }}>
-        <input
-          ref={searchRef}
-          className="search"
-          placeholder="Buscar actividad, OT, asignador…  (/)"
-          value={filters.search}
-          onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-        />
+        <div className="search-row">
+          <input
+            ref={searchRef}
+            className="search"
+            placeholder="Buscar actividad, OT, asignador…  (/)"
+            value={filters.search}
+            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+          />
+          <button
+            type="button"
+            className={`btn-ghost refine-toggle${refineOpen ? ' is-active' : ''}`}
+            onClick={() => setRefineOpen((o) => !o)}
+          >
+            Refinar {refineOpen ? '▴' : '▾'}
+          </button>
+          <p className="filter-count">
+            {filtered.length} / {tasks.length}
+          </p>
+        </div>
+
+        <AnimatePresence>
+          {refineOpen && (
+        <motion.section
+          className="scroll-fold filters"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.25 }}
+        >
         <select
           value={filters.status}
           onChange={(e) =>
@@ -573,13 +639,13 @@ export function Dashboard() {
           <option value="status">Estado</option>
           <option value="activity">Actividad A–Z</option>
         </select>
-        <label className="toggle">
+        <label className="toggle" title="Cambia el rollo de temples de urgencia a categorías clásicas">
           <input
             type="checkbox"
             checked={filters.groupByCategory}
             onChange={(e) => setFilters((f) => ({ ...f, groupByCategory: e.target.checked }))}
           />
-          Agrupar
+          Agrupar por categoría (clásico)
         </label>
         <div className="saved-filters">
           <select
@@ -616,10 +682,9 @@ export function Dashboard() {
             Guardar filtro
           </button>
         </div>
-        <p className="filter-count">
-          {filtered.length} / {tasks.length}
-        </p>
-      </motion.section>
+        </motion.section>
+          )}
+        </AnimatePresence>
 
       <div className="task-board" ref={boardRef}>
         {loading ? (
@@ -637,8 +702,8 @@ export function Dashboard() {
             <div className="empty-seal" aria-hidden>
               空
             </div>
-            <h2>Sin coincidencias</h2>
-            <p>Ajusta filtros o la búsqueda para revelar tareas del sello.</p>
+            <h2>Ningún pergamino coincide</h2>
+            <p>Ajusta la búsqueda o el refinado para revelar tareas del templo.</p>
           </motion.div>
         ) : (
           <AnimatePresence mode="wait">
@@ -649,13 +714,23 @@ export function Dashboard() {
               exit={prefs.reduceMotion ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: 0.35 }}
             >
-              {view === 'list' && (
+              {view === 'list' && filters.groupByCategory && (
                 <ListView
                   completed={isGuest ? completed : completed}
                   activeGroups={displayActiveGroups}
                   groupByCategory={filters.groupByCategory}
                   showCompletedSection={showCompletedSection}
                   showActiveSection={showActiveSection && active.length > 0}
+                  readOnly={isGuest}
+                  density={prefs.density}
+                  onStatus={(id, s) => void updateTask(id, { status: s }, 'status')}
+                  onDone={(id) => void updateTask(id, { status: 'completada' }, 'status')}
+                  onOpen={setDetail}
+                />
+              )}
+              {view === 'list' && !filters.groupByCategory && (
+                <UrgencyBoard
+                  tasks={filtered}
                   readOnly={isGuest}
                   density={prefs.density}
                   onStatus={(id, s) => void updateTask(id, { status: s }, 'status')}

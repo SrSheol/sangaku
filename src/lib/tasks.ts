@@ -16,7 +16,7 @@ import {
   idbAddHistory,
 } from './db'
 import type { SeedFile, Task, TaskFilters, TaskStatus } from '../types'
-import { daysUntilDue, todayInMexico, urgencyLevel } from './dates'
+import { daysUntilDue, parseDay, todayInMexico, urgencyLevel } from './dates'
 
 const seed = seedFile as SeedFile
 const BATCH_CHUNK = 400
@@ -378,4 +378,61 @@ export async function recordTaskHistory(
     to,
     by,
   })
+}
+
+/* ————————————————————————————————————————————
+   Urgency temples — the primary organizing lens of the new IA.
+   Pure/read-only helpers: no merge, seed or Firestore logic here.
+   ———————————————————————————————————————————— */
+export type UrgencyBucketKey = 'overdue' | 'today' | 'week' | 'later' | 'closed'
+
+export const URGENCY_BUCKET_ORDER: UrgencyBucketKey[] = ['overdue', 'today', 'week', 'later', 'closed']
+
+export function bucketForTask(t: Task, today = todayInMexico()): UrgencyBucketKey {
+  if (t.status === 'completada' || t.status === 'cancelada') return 'closed'
+  const days = daysUntilDue(t.dueAt, today)
+  if (days === null) return 'later'
+  if (days < 0) return 'overdue'
+  if (days === 0) return 'today'
+  if (days <= 7) return 'week'
+  return 'later'
+}
+
+function byDueAsc(a: Task, b: Task): number {
+  return (a.dueAt || '9999').localeCompare(b.dueAt || '9999')
+}
+
+/** Groups tasks into the five urgency temples; each bucket sorted by due date. */
+export function groupByUrgency(tasks: Task[]): Record<UrgencyBucketKey, Task[]> {
+  const today = todayInMexico()
+  const out: Record<UrgencyBucketKey, Task[]> = {
+    overdue: [],
+    today: [],
+    week: [],
+    later: [],
+    closed: [],
+  }
+  for (const t of tasks) out[bucketForTask(t, today)].push(t)
+  for (const key of URGENCY_BUCKET_ORDER) out[key].sort(byDueAsc)
+  return out
+}
+
+/** Counts behind the "Sello del día" hero — same bucket definitions as groupByUrgency. */
+export function computeTempleCounts(tasks: Task[]) {
+  const today = todayInMexico()
+  const g = groupByUrgency(tasks)
+  const closedToday = g.closed.filter((t) => {
+    if (!t.updatedAt) return false
+    const d = parseDay(t.updatedAt)
+    return d ? d.getTime() === today.getTime() : false
+  }).length
+  return {
+    total: tasks.length,
+    overdue: g.overdue.length,
+    today: g.today.length,
+    week: g.week.length,
+    later: g.later.length,
+    closed: g.closed.length,
+    closedToday,
+  }
 }

@@ -627,15 +627,17 @@ button {
   color: var(--washi-dim);
 }
 
-.rail-views {
+/* Lens strip — secondary view switcher, demoted out of the topbar */
+.lens-strip {
   display: flex;
-  align-items: stretch;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.3rem;
-  margin: 0 auto;
+  margin: 0 0 0.4rem;
   padding: 0;
 }
 
-.rail-view {
+.lens-btn {
   position: relative;
   display: flex;
   flex-direction: row;
@@ -643,32 +645,27 @@ button {
   gap: 0.45rem;
   border: none;
   background: transparent;
-  padding: 0.5rem 0.9rem;
+  padding: 0.45rem 0.85rem;
   color: var(--washi-dim);
   border-radius: 3px 12px 3px 12px;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
   transition: color 0.2s, background 0.2s;
 }
 
-.rail-num {
+.lens-glyph {
   font-family: var(--font-brush);
-  font-size: 1.05rem;
+  font-size: 1rem;
   line-height: 1;
   color: var(--gold);
 }
 
-.rail-label {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-align: center;
-  line-height: 1.15;
-}
-
-.rail-view::after {
+.lens-btn::after {
   content: '';
   position: absolute;
-  left: 12%;
-  right: 12%;
-  bottom: 0.15rem;
+  left: 14%;
+  right: 14%;
+  bottom: 0.1rem;
   height: 2px;
   border-radius: 2px;
   background: var(--vermillion);
@@ -677,21 +674,30 @@ button {
   transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.rail-view:hover {
+.lens-btn:hover {
   color: var(--washi);
   background: rgba(189, 149, 80, 0.07);
 }
 
-.rail-view.is-active {
+.lens-btn.is-active {
   color: var(--washi);
 }
 
-.rail-view.is-active::after {
+.lens-btn.is-active::after {
   transform: scaleX(1);
 }
 
+.lens-hint {
+  margin-left: 0.5rem;
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-size: 0.76rem;
+  color: var(--washi-dim);
+  opacity: 0.75;
+}
+
 .rail-spacer {
-  flex: 0 0 0;
+  flex: 1;
 }
 
 .rail-tools {
@@ -860,6 +866,36 @@ button {
 .stamp-stat.tone-gold { color: var(--gold-bright); }
 .stamp-stat.tone-ivory { color: var(--st-done); }
 
+/* Progress scroll — a brush-stroke fill line under the daily-focus stamps */
+.progress-scroll {
+  position: relative;
+  margin-top: 1.1rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: rgba(244, 234, 212, 0.06);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+.progress-scroll-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, var(--vermillion-deep), var(--gold));
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.progress-scroll-label {
+  position: relative;
+  z-index: 1;
+  margin-left: 0.85rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--washi);
+  mix-blend-mode: difference;
+}
+
 .brush-divider {
   width: 100%;
   height: 18px;
@@ -925,6 +961,47 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+}
+
+.tools-group + .tools-group {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--hairline);
+}
+
+.tools-group-label {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-size: 0.76rem;
+  color: var(--gold-bright);
+}
+
+/* Always-visible search row + collapsible refine toggle */
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.refine-toggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.refine-toggle.is-active {
+  color: var(--washi);
+  border-color: var(--gold-hairline);
+  background: rgba(189, 149, 80, 0.1);
+}
+
+.search-row .filter-count {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--washi-dim);
+  white-space: nowrap;
 }
 
 /* Filters — a folded scroll strip rather than a glass card row */
@@ -1094,6 +1171,120 @@ button {
 
 .category-sub + .category-sub {
   margin-top: 0.5rem;
+}
+
+/* ————————————————————————————————————————————
+   Temple board — the new default: five collapsible urgency
+   scrolls instead of a flat category list.
+   ———————————————————————————————————————————— */
+.temple-board {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.temple-section {
+  position: relative;
+}
+
+.temple-section .card-list {
+  margin-top: 0.85rem;
+  padding-left: 0.2rem;
+}
+
+.temple-summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 3px 18px 3px 18px / 14px 3px 18px 4px;
+  transition: background 0.2s;
+}
+
+.temple-summary::-webkit-details-marker {
+  display: none;
+}
+
+.temple-summary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgba(41, 36, 27, 0.4);
+  border-left: 3px solid var(--st-neutral);
+}
+
+.temple-section.temple-overdue .temple-summary::before { border-left-color: var(--vermillion); }
+.temple-section.temple-today .temple-summary::before { border-left-color: var(--gold-bright); }
+.temple-section.temple-week .temple-summary::before { border-left-color: var(--gold); }
+.temple-section.temple-later .temple-summary::before { border-left-color: var(--suzuri); opacity: 0.7; }
+.temple-section.temple-closed .temple-summary::before { border-left-color: var(--st-done); opacity: 0.55; }
+
+.temple-summary:hover {
+  background: rgba(189, 149, 80, 0.05);
+}
+
+.temple-glyph {
+  font-family: var(--font-brush);
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--gold-bright);
+  flex: 0 0 auto;
+}
+
+.temple-section.temple-overdue .temple-glyph { color: var(--vermillion); }
+
+.temple-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.temple-label {
+  font-family: var(--font-jp);
+  font-size: 1rem;
+  color: var(--washi);
+}
+
+.temple-hint {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-size: 0.72rem;
+  color: var(--washi-dim);
+  opacity: 0.8;
+}
+
+.temple-summary .count {
+  flex: 0 0 auto;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  color: var(--washi-dim);
+  border-radius: 2px 8px 2px 8px;
+  border: 1px solid var(--washi-glass-strong);
+  padding: 0.1rem 0.5rem;
+}
+
+.temple-chevron {
+  flex: 0 0 auto;
+  font-family: var(--font-jp);
+  font-size: 0.72rem;
+  color: var(--washi-dim);
+  transition: transform 0.25s ease;
+}
+
+.temple-section[open] .temple-chevron {
+  transform: rotate(180deg);
+}
+
+.temple-section.temple-later,
+.temple-section.temple-closed {
+  opacity: 0.9;
 }
 
 .card-list {
@@ -2203,12 +2394,15 @@ button {
     padding: 0.7rem 0.9rem;
     gap: 0.6rem;
   }
-  .rail-views {
-    order: 3;
-    margin: 0;
-    width: 100%;
+  .lens-strip {
     overflow-x: auto;
-    justify-content: flex-start;
+    flex-wrap: nowrap;
+  }
+  .lens-hint {
+    display: none;
+  }
+  .search-row {
+    flex-wrap: wrap;
   }
   .canvas { padding: 1.5rem 1rem 3rem; }
   .canvas-header { align-items: flex-start; }
@@ -2229,6 +2423,5 @@ button {
     max-width: 200px;
     font-size: 0.62rem;
   }
-  .rail-label { display: none; }
   .koi-fish { opacity: 0.1; }
 }

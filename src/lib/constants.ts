@@ -35,10 +35,48 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 }
 
 export const VIEW_LABELS: Record<AppView, string> = {
-  list: 'Lista',
+  list: 'Rollo',
   calendar: 'Calendario',
-  kanban: 'Kanban',
-  timeline: 'Línea de tiempo',
+  kanban: 'Flujo',
+  timeline: 'Línea',
+}
+
+export const VIEW_HINTS: Record<AppView, string> = {
+  list: 'orden por urgencia, en temples',
+  calendar: 'el mes, día por día',
+  kanban: 'la procesión por estado',
+  timeline: 'el tramo de tiempo completo',
+}
+
+export const VIEW_GLYPHS: Record<AppView, string> = {
+  list: '一',
+  calendar: '二',
+  kanban: '三',
+  timeline: '四',
+}
+
+export const URGENCY_BUCKET_LABELS: Record<string, string> = {
+  overdue: 'Vencidas',
+  today: 'Hoy',
+  week: 'Esta semana',
+  later: 'Más adelante',
+  closed: 'Cerradas',
+}
+
+export const URGENCY_BUCKET_GLYPHS: Record<string, string> = {
+  overdue: '蔵',
+  today: '今',
+  week: '週',
+  later: '遠',
+  closed: '済',
+}
+
+export const URGENCY_BUCKET_HINTS: Record<string, string> = {
+  overdue: 'el sello que reclama atención primero',
+  today: 'lo que el día de hoy pide',
+  week: 'lo que se acerca en los próximos días',
+  later: 'sin prisa, aún en reposo',
+  closed: 'completadas y canceladas — el archivo',
 }
 
 export const STORAGE_KEY = 'sangaku-pendientes-v1'

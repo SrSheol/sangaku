@@ -2,10 +2,10 @@ import { Modal } from './Modal'
 
 const ROWS = [
   ['/', 'Enfocar búsqueda'],
-  ['1', 'Vista lista'],
-  ['2', 'Vista calendario'],
-  ['3', 'Vista kanban'],
-  ['4', 'Vista línea de tiempo'],
+  ['1', 'Lente: Rollo (temples de urgencia)'],
+  ['2', 'Lente: Calendario'],
+  ['3', 'Lente: Flujo (kanban)'],
+  ['4', 'Lente: Línea de tiempo'],
   ['?', 'Mostrar atajos'],
   ['Esc', 'Cerrar paneles'],
 ]
