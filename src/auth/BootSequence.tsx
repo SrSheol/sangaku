@@ -81,7 +81,7 @@ export function BootSequence({ onDone }: Props) {
             animate={{ opacity: 0.65 }}
             transition={{ delay: 0.95, duration: 0.9 }}
           >
-            quiet path · temple of tasks
+            sendero silencioso · templo de pendientes
           </motion.p>
           <motion.p
             className="boot-skip"

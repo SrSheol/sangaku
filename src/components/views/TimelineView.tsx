@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import {
   addDays,
   differenceInCalendarDays,
@@ -8,9 +9,10 @@ import {
   parseISO,
   startOfDay,
 } from 'date-fns'
-import { STATUS_LABELS } from '../../lib/constants'
-import { todayInMexico } from '../../lib/dates'
-import type { Task } from '../../types'
+import { es } from 'date-fns/locale'
+import { CATEGORY_LABELS, STATUS_LABELS } from '../../lib/constants'
+import { todayInMexico, urgencyLevel } from '../../lib/dates'
+import type { Task, TaskCategory } from '../../types'
 
 export function TimelineView({
   tasks,
@@ -19,7 +21,7 @@ export function TimelineView({
   tasks: Task[]
   onOpen: (task: Task) => void
 }) {
-  const { start, end, span, rows } = useMemo(() => {
+  const { start, end, span, rows, todayPct } = useMemo(() => {
     const today = todayInMexico()
     const dated = tasks.filter((t) => t.assignedAt || t.dueAt)
     if (dated.length === 0) {
@@ -28,6 +30,7 @@ export function TimelineView({
         end: addDays(today, 28),
         span: 28,
         rows: [] as { task: Task; left: number; width: number }[],
+        todayPct: 0,
       }
     }
     const starts = dated.map((t) => startOfDay(parseISO((t.assignedAt || t.dueAt).slice(0, 10))))
@@ -48,7 +51,8 @@ export function TimelineView({
         const width = Math.max(1, differenceInCalendarDays(d, a) + 1)
         return { task, left: (left / sp) * 100, width: (width / sp) * 100 }
       })
-    return { start: s, end: e, span: sp, rows }
+    const tPct = Math.min(100, Math.max(0, (differenceInCalendarDays(today, s) / sp) * 100))
+    return { start: s, end: e, span: sp, rows, todayPct: tPct }
   }, [tasks])
 
   const ticks = useMemo(() => {
@@ -83,24 +87,49 @@ export function TimelineView({
             {t.label}
           </span>
         ))}
+        {todayPct >= 0 && todayPct <= 100 && (
+          <span className="tl-today-tick" style={{ left: `${todayPct}%` }}>
+            hoy
+          </span>
+        )}
       </div>
       <div className="tl-rows">
-        {rows.map(({ task, left, width }) => (
-          <button
-            key={task.id}
-            type="button"
-            className={`tl-row status-${task.status}`}
-            onClick={() => onOpen(task)}
-            title={`${task.activity} · ${STATUS_LABELS[task.status]}`}
-          >
-            <span className="tl-label">OT {task.ot}</span>
-            <span className="tl-track">
-              <span className="tl-bar" style={{ left: `${left}%`, width: `${Math.min(100 - left, width)}%` }}>
-                {task.activity}
+        {todayPct >= 0 && todayPct <= 100 && (
+          <div className="tl-today-line" style={{ left: `calc(7.5rem + ${todayPct}% * (100% - 7.5rem) / 100)` }} aria-hidden />
+        )}
+        {rows.map(({ task, left, width }, idx) => {
+          const urg = urgencyLevel(task.dueAt, task.status)
+          const clampedWidth = Math.min(100 - left, width)
+          return (
+            <motion.button
+              key={task.id}
+              type="button"
+              className={`tl-row status-${task.status}`}
+              onClick={() => onOpen(task)}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: Math.min(idx, 30) * 0.02, duration: 0.28 }}
+            >
+              <span className="tl-label">OT {task.ot}</span>
+              <span className="tl-track">
+                <motion.span
+                  className={`tl-bar urg-${urg}`}
+                  style={{ left: `${left}%` }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${clampedWidth}%` }}
+                  transition={{ delay: Math.min(idx, 30) * 0.02 + 0.1, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  {task.activity}
+                </motion.span>
+                <span className="tl-tooltip" style={{ left: `${left}%` }} role="tooltip">
+                  <strong>{task.activity}</strong>
+                  <span>{STATUS_LABELS[task.status]} · {CATEGORY_LABELS[task.category as TaskCategory] ?? task.category}</span>
+                  <span>Vence {format(parseISO(task.dueAt.slice(0, 10)), 'dd MMM yyyy', { locale: es })}</span>
+                </span>
               </span>
-            </span>
-          </button>
-        ))}
+            </motion.button>
+          )
+        })}
       </div>
       <p className="tl-caption">
         {format(start, 'dd MMM yyyy')} — {format(end, 'dd MMM yyyy')}
