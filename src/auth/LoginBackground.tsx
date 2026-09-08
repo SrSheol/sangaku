@@ -1,8 +1,30 @@
 import { useEffect, useRef } from 'react'
 
-/** Soft sumi-e geometry: floating circles & arcs (sangaku motifs). */
+/** Soft sumi-e geometry + parallax gold dust layers. */
 export function LoginBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const layerRef = useRef<HTMLDivElement>(null)
+  const dustRef = useRef<HTMLDivElement>(null)
+  const pointer = useRef({ x: 0.5, y: 0.5 })
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      pointer.current = {
+        x: e.clientX / window.innerWidth,
+        y: e.clientY / window.innerHeight,
+      }
+      const dx = (pointer.current.x - 0.5) * 24
+      const dy = (pointer.current.y - 0.5) * 18
+      if (layerRef.current) {
+        layerRef.current.style.transform = `translate3d(${dx * 0.35}px, ${dy * 0.35}px, 0)`
+      }
+      if (dustRef.current) {
+        dustRef.current.style.transform = `translate3d(${dx * -0.55}px, ${dy * -0.45}px, 0)`
+      }
+    }
+    window.addEventListener('pointermove', onMove, { passive: true })
+    return () => window.removeEventListener('pointermove', onMove)
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -34,12 +56,12 @@ export function LoginBackground() {
       canvas.style.height = `${h}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-      const count = Math.max(12, Math.floor((w * h) / 90000))
+      const count = Math.max(14, Math.floor((w * h) / 85000))
       motifs = Array.from({ length: count }, () => ({
         x: Math.random() * w,
         y: Math.random() * h,
-        r: 18 + Math.random() * 70,
-        speed: 0.15 + Math.random() * 0.35,
+        r: 18 + Math.random() * 75,
+        speed: 0.12 + Math.random() * 0.32,
         phase: Math.random() * Math.PI * 2,
         kind: (['circle', 'arc', 'tri'] as const)[Math.floor(Math.random() * 3)],
       }))
@@ -50,54 +72,71 @@ export function LoginBackground() {
       t += 0.008
       const w = window.innerWidth
       const h = window.innerHeight
+      const px = (pointer.current.x - 0.5) * 18
+      const py = (pointer.current.y - 0.5) * 12
 
       ctx.clearRect(0, 0, w, h)
 
-      // deep ink wash
-      const g = ctx.createRadialGradient(w * 0.5, h * 0.35, 40, w * 0.5, h * 0.5, Math.max(w, h) * 0.75)
-      g.addColorStop(0, '#1a1612')
-      g.addColorStop(0.55, '#12100e')
-      g.addColorStop(1, '#0a0908')
+      // deep espresso wash
+      const g = ctx.createRadialGradient(
+        w * 0.5 + px,
+        h * 0.32 + py,
+        40,
+        w * 0.5,
+        h * 0.5,
+        Math.max(w, h) * 0.78,
+      )
+      g.addColorStop(0, '#2a1c12')
+      g.addColorStop(0.45, '#16100c')
+      g.addColorStop(1, '#070605')
       ctx.fillStyle = g
       ctx.fillRect(0, 0, w, h)
 
       for (const m of motifs) {
         const pulse = 0.5 + 0.5 * Math.sin(t * m.speed + m.phase)
-        const alpha = 0.04 + pulse * 0.08
-        ctx.strokeStyle = `rgba(201, 162, 39, ${alpha})`
+        const alpha = 0.045 + pulse * 0.09
+        const ox = m.x + px * 0.4
+        const oy = m.y + py * 0.4 + Math.sin(t * m.speed + m.phase) * 5
+        ctx.strokeStyle = `rgba(212, 175, 55, ${alpha})`
         ctx.lineWidth = 1
         ctx.beginPath()
         if (m.kind === 'circle') {
-          ctx.arc(m.x, m.y + Math.sin(t * m.speed + m.phase) * 6, m.r, 0, Math.PI * 2)
+          ctx.arc(ox, oy, m.r, 0, Math.PI * 2)
         } else if (m.kind === 'arc') {
           ctx.arc(
-            m.x,
-            m.y,
+            ox,
+            oy,
             m.r,
             m.phase + t * 0.2,
             m.phase + t * 0.2 + Math.PI * (0.6 + pulse * 0.5),
           )
         } else {
-          const y = m.y + Math.cos(t * m.speed) * 4
-          ctx.moveTo(m.x, y - m.r * 0.6)
-          ctx.lineTo(m.x + m.r * 0.55, y + m.r * 0.45)
-          ctx.lineTo(m.x - m.r * 0.55, y + m.r * 0.45)
+          ctx.moveTo(ox, oy - m.r * 0.6)
+          ctx.lineTo(ox + m.r * 0.55, oy + m.r * 0.45)
+          ctx.lineTo(ox - m.r * 0.55, oy + m.r * 0.45)
           ctx.closePath()
         }
         ctx.stroke()
 
-        if (m.kind === 'circle' && pulse > 0.7) {
+        if (m.kind === 'circle' && pulse > 0.72) {
           ctx.beginPath()
-          ctx.arc(m.x, m.y, m.r * 0.35, 0, Math.PI * 2)
-          ctx.strokeStyle = `rgba(139, 30, 45, ${alpha * 1.4})`
+          ctx.arc(ox, oy, m.r * 0.32, 0, Math.PI * 2)
+          ctx.strokeStyle = `rgba(168, 120, 55, ${alpha * 1.35})`
           ctx.stroke()
         }
       }
 
-      // soft crimson vignette
-      const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.7)
+      // warm lacquer vignette
+      const vg = ctx.createRadialGradient(
+        w / 2,
+        h / 2,
+        Math.min(w, h) * 0.18,
+        w / 2,
+        h / 2,
+        Math.max(w, h) * 0.72,
+      )
       vg.addColorStop(0, 'rgba(0,0,0,0)')
-      vg.addColorStop(1, 'rgba(40, 8, 12, 0.45)')
+      vg.addColorStop(1, 'rgba(20, 10, 4, 0.55)')
       ctx.fillStyle = vg
       ctx.fillRect(0, 0, w, h)
     }
@@ -111,5 +150,11 @@ export function LoginBackground() {
     }
   }, [])
 
-  return <canvas ref={canvasRef} className="login-bg" aria-hidden />
+  return (
+    <>
+      <canvas ref={canvasRef} className="login-bg" aria-hidden />
+      <div ref={layerRef} className="login-parallax login-parallax-geo" aria-hidden />
+      <div ref={dustRef} className="login-parallax login-parallax-dust" aria-hidden />
+    </>
+  )
 }

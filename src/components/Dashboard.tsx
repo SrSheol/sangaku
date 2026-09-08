@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import { AnimatePresence, motion, useSpring, useTransform } from 'framer-motion'
 import { useAuth } from '../auth/AuthGate'
-import { EXPECTED_USER } from '../auth/session'
+import { EXPECTED_USER, GUEST_USER, loadStoredFilters, saveStoredFilters } from '../auth/session'
 import { CATEGORIES, CATEGORY_LABELS, STATUS_LABELS, STATUSES } from '../lib/constants'
 import { formatDay, urgencyLevel, daysUntilDue } from '../lib/dates'
 import {
@@ -29,18 +36,53 @@ const defaultFilters: TaskFilters = {
   groupByCategory: true,
 }
 
-const STAGGER_LIMIT = 20
+const STAGGER_LIMIT = 18
+
+function parseFilters(raw: string | null): TaskFilters {
+  if (!raw) return defaultFilters
+  try {
+    const parsed = JSON.parse(raw) as Partial<TaskFilters>
+    return {
+      status: parsed.status ?? 'all',
+      category: parsed.category ?? 'all',
+      search: typeof parsed.search === 'string' ? parsed.search : '',
+      sort: parsed.sort ?? 'dueAsc',
+      groupByCategory: typeof parsed.groupByCategory === 'boolean' ? parsed.groupByCategory : true,
+    }
+  } catch {
+    return defaultFilters
+  }
+}
+
+function CountUp({ value }: { value: number }) {
+  const spring = useSpring(0, { stiffness: 90, damping: 18 })
+  const display = useTransform(spring, (v) => Math.round(v))
+  const [text, setText] = useState('0')
+
+  useEffect(() => {
+    spring.set(value)
+  }, [spring, value])
+
+  useEffect(() => {
+    const unsub = display.on('change', (v) => setText(String(v)))
+    return () => unsub()
+  }, [display])
+
+  return <strong>{text}</strong>
+}
 
 export function Dashboard() {
-  const { logout } = useAuth()
+  const { logout, role, isGuest, isAdmin } = useAuth()
   const meta = seedMeta()
   const [tasks, setTasks] = useState<Task[]>(() => seedLocalIfEmpty())
-  const [filters, setFilters] = useState<TaskFilters>(defaultFilters)
+  const [filters, setFilters] = useState<TaskFilters>(() => parseFilters(loadStoredFilters(role)))
   const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [editingNotes, setEditingNotes] = useState<string | null>(null)
   const [notesDraft, setNotesDraft] = useState('')
   const [showAdd, setShowAdd] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const persist = useCallback((next: Task[]) => {
     setTasks(next)
@@ -52,9 +94,9 @@ export function Dashboard() {
     ;(async () => {
       const { tasks: reconciled, toast: msg } = await loadAndReconcileTasks()
       if (cancelled) return
-      // Never blindly replace with a tiny remote subset — reconcile merges
       persist(reconciled)
       if (msg) setToast(msg)
+      setLoading(false)
     })()
     return () => {
       cancelled = true
@@ -67,14 +109,50 @@ export function Dashboard() {
     return () => window.clearTimeout(id)
   }, [toast])
 
+  useEffect(() => {
+    saveStoredFilters(role, JSON.stringify(filters))
+  }, [filters, role])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      e.preventDefault()
+      searchRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const kpis = useMemo(() => computeKpis(tasks), [tasks])
   const filtered = useMemo(() => filterTasks(tasks, filters), [tasks, filters])
-  const groups = useMemo(
-    () => (filters.groupByCategory ? groupByCategory(filtered) : [{ category: 'all', tasks: filtered }]),
-    [filtered, filters.groupByCategory],
+
+  const { completed, active } = useMemo(() => {
+    const done = filtered.filter((t) => t.status === 'completada')
+    const rest = filtered.filter((t) => t.status !== 'completada')
+    return { completed: done, active: rest }
+  }, [filtered])
+
+  const activeGroups = useMemo(
+    () =>
+      filters.groupByCategory && !isGuest
+        ? groupByCategory(active)
+        : [{ category: 'all', tasks: active }],
+    [active, filters.groupByCategory, isGuest],
   )
 
+  // Guest: also allow groupByCategory on actives if they toggle it
+  const guestActiveGroups = useMemo(
+    () =>
+      filters.groupByCategory ? groupByCategory(active) : [{ category: 'all', tasks: active }],
+    [active, filters.groupByCategory],
+  )
+
+  const displayActiveGroups = isGuest ? guestActiveGroups : activeGroups
+
   const updateTask = async (id: string, patch: Partial<Task>) => {
+    if (!isAdmin) return
     const next = tasks.map((t) =>
       t.id === id ? { ...t, ...patch, updatedAt: new Date().toISOString() } : t,
     )
@@ -84,12 +162,14 @@ export function Dashboard() {
   }
 
   const handleSeedLocal = () => {
+    if (!isAdmin) return
     const seeded = forceLoadSeedLocal()
     persist(seeded)
     setToast(`Seed local: ${seeded.length} tareas cargadas`)
   }
 
   const handleSyncFirestore = async () => {
+    if (!isAdmin) return
     setBusy(true)
     const res = await syncSeedToFirestore()
     setBusy(false)
@@ -101,6 +181,7 @@ export function Dashboard() {
   }
 
   const handleForceReseed = async () => {
+    if (!isAdmin) return
     setBusy(true)
     const res = await forceReseedAll()
     setBusy(false)
@@ -109,6 +190,7 @@ export function Dashboard() {
   }
 
   const handleAdd = (draft: Omit<Task, 'id' | 'collaborator' | 'badge'>) => {
+    if (!isAdmin) return
     const task: Task = {
       ...draft,
       id: newTaskId(tasks),
@@ -123,12 +205,14 @@ export function Dashboard() {
     setToast('Tarea añadida')
   }
 
+  const sessionLabel = isGuest ? GUEST_USER : EXPECTED_USER
+
   return (
     <motion.div
       className="app-shell"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.45 }}
+      transition={{ duration: 0.5 }}
     >
       <div className="grain" aria-hidden />
       <header className="topbar">
@@ -147,35 +231,49 @@ export function Dashboard() {
         </div>
         <div className="topbar-actions">
           <span className="user-chip" title="Sesión activa">
-            Sesión · {EXPECTED_USER}
+            Sesión · {sessionLabel}
           </span>
-          <button type="button" className="btn-ghost" onClick={() => setShowAdd(true)}>
-            + Tarea
-          </button>
-          <button type="button" className="btn-ghost" onClick={handleSeedLocal}>
-            Cargar seed
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            disabled={busy}
-            onClick={() => void handleForceReseed()}
-          >
-            {busy ? 'Restaurando…' : `Restaurar ${seedCount()}`}
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            disabled={busy}
-            onClick={() => void handleSyncFirestore()}
-          >
-            {busy ? 'Sincronizando…' : 'Sync Firestore'}
-          </button>
+          {isAdmin && (
+            <>
+              <button type="button" className="btn-ghost" onClick={() => setShowAdd(true)}>
+                + Tarea
+              </button>
+              <button type="button" className="btn-ghost" onClick={handleSeedLocal}>
+                Cargar seed
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={busy}
+                onClick={() => void handleForceReseed()}
+              >
+                {busy ? 'Restaurando…' : `Restaurar ${seedCount()}`}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={busy}
+                onClick={() => void handleSyncFirestore()}
+              >
+                {busy ? 'Sincronizando…' : 'Sync Firestore'}
+              </button>
+            </>
+          )}
           <button type="button" className="btn-seal btn-seal-sm" onClick={() => void logout()}>
             Salir
           </button>
         </div>
       </header>
+
+      {isGuest && (
+        <motion.div
+          className="guest-banner"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          Vista de invitado · solo lectura
+        </motion.div>
+      )}
 
       <section className="kpi-grid">
         {[
@@ -188,12 +286,12 @@ export function Dashboard() {
           <motion.article
             key={k.label}
             className={`kpi-card tone-${k.tone}`}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.06, duration: 0.4 }}
+            initial={{ opacity: 0, y: 14, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay: i * 0.05, type: 'spring', stiffness: 260, damping: 22 }}
           >
             <p>{k.label}</p>
-            <strong>{k.value}</strong>
+            <CountUp value={loading ? 0 : k.value} />
           </motion.article>
         ))}
       </section>
@@ -204,8 +302,9 @@ export function Dashboard() {
         transition={{ duration: 0.25 }}
       >
         <input
+          ref={searchRef}
           className="search"
-          placeholder="Buscar actividad, OT, asignador…"
+          placeholder="Buscar actividad, OT, asignador…  (/)"
           value={filters.search}
           onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
         />
@@ -261,58 +360,127 @@ export function Dashboard() {
       </motion.section>
 
       <div className="task-board">
-        <AnimatePresence mode="wait">
-          {groups.map((g) => (
-            <motion.section
-              key={g.category}
-              className="category-block"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              {filters.groupByCategory && (
-                <h2 className="category-title">
+        {loading ? (
+          <div className="skeleton-list" aria-busy aria-label="Cargando tareas">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="skeleton-card" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <motion.div
+            className="empty-state"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <div className="empty-seal" aria-hidden>
+              空
+            </div>
+            <h2>Sin coincidencias</h2>
+            <p>Ajusta filtros o la búsqueda para revelar tareas del sello.</p>
+          </motion.div>
+        ) : (
+          <AnimatePresence mode="wait">
+            {completed.length > 0 && filters.status !== 'asignada' && filters.status !== 'en_proceso' && filters.status !== 'cancelada' && (
+              <motion.section
+                key="completed"
+                className="category-block section-completed"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+              >
+                <h2 className="category-title section-divider">
                   <span className="hairline" />
-                  {CATEGORY_LABELS[g.category as TaskCategory] ?? g.category}
-                  <span className="count">{g.tasks.length}</span>
+                  Completadas
+                  <span className="count">{completed.length}</span>
                 </h2>
+                <div className="card-list">
+                  {completed.map((task, idx) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      index={idx}
+                      readOnly={isGuest}
+                      onStatus={(status) => void updateTask(task.id, { status })}
+                      onDone={() => void updateTask(task.id, { status: 'completada' })}
+                      onEditNotes={() => {
+                        if (isGuest) return
+                        setEditingNotes(task.id)
+                        setNotesDraft(task.notes ?? '')
+                      }}
+                    />
+                  ))}
+                </div>
+              </motion.section>
+            )}
+
+            {(filters.status === 'all' ||
+              filters.status === 'asignada' ||
+              filters.status === 'en_proceso' ||
+              filters.status === 'cancelada') &&
+              active.length > 0 && (
+                <motion.section
+                  key="active-wrap"
+                  className="category-block"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  {completed.length > 0 &&
+                    filters.status === 'all' && (
+                      <h2 className="category-title section-divider">
+                        <span className="hairline" />
+                        Activas
+                        <span className="count">{active.length}</span>
+                      </h2>
+                    )}
+                  {displayActiveGroups.map((g) => (
+                    <div key={g.category} className="category-sub">
+                      {filters.groupByCategory && g.category !== 'all' && (
+                        <h3 className="category-title nested">
+                          <span className="hairline" />
+                          {CATEGORY_LABELS[g.category as TaskCategory] ?? g.category}
+                          <span className="count">{g.tasks.length}</span>
+                        </h3>
+                      )}
+                      <div className="card-list">
+                        {g.tasks.map((task, idx) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            index={idx}
+                            readOnly={isGuest}
+                            onStatus={(status) => void updateTask(task.id, { status })}
+                            onDone={() => void updateTask(task.id, { status: 'completada' })}
+                            onEditNotes={() => {
+                              if (isGuest) return
+                              setEditingNotes(task.id)
+                              setNotesDraft(task.notes ?? '')
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </motion.section>
               )}
-              <div className="card-list">
-                {g.tasks.map((task, idx) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    index={idx}
-                    onStatus={(status) => void updateTask(task.id, { status })}
-                    onDone={() => void updateTask(task.id, { status: 'completada' })}
-                    onEditNotes={() => {
-                      setEditingNotes(task.id)
-                      setNotesDraft(task.notes ?? '')
-                    }}
-                  />
-                ))}
-              </div>
-              {g.tasks.length === 0 && <p className="empty-hint">Sin tareas en este filtro.</p>}
-            </motion.section>
-          ))}
-        </AnimatePresence>
+          </AnimatePresence>
+        )}
       </div>
 
       <AnimatePresence>
         {toast && (
           <motion.div
             className="toast"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 28, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 12, x: '-50%' }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
           >
             {toast}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {editingNotes && (
+      {isAdmin && editingNotes && (
         <Modal title="Notas" onClose={() => setEditingNotes(null)}>
           <textarea
             rows={5}
@@ -339,7 +507,7 @@ export function Dashboard() {
         </Modal>
       )}
 
-      {showAdd && <AddTaskModal onClose={() => setShowAdd(false)} onSave={handleAdd} />}
+      {isAdmin && showAdd && <AddTaskModal onClose={() => setShowAdd(false)} onSave={handleAdd} />}
     </motion.div>
   )
 }
@@ -347,12 +515,14 @@ export function Dashboard() {
 function TaskCard({
   task,
   index,
+  readOnly,
   onStatus,
   onDone,
   onEditNotes,
 }: {
   task: Task
   index: number
+  readOnly?: boolean
   onStatus: (s: TaskStatus) => void
   onDone: () => void
   onEditNotes: () => void
@@ -360,18 +530,23 @@ function TaskCard({
   const urg = urgencyLevel(task.dueAt, task.status)
   const days = daysUntilDue(task.dueAt)
   const stagger = index < STAGGER_LIMIT ? index * 0.028 : 0
+  const done = task.status === 'completada'
 
   return (
     <motion.article
-      className={`task-card urg-${urg}`}
+      className={`task-card urg-${urg}${done ? ' is-done' : ''}${readOnly ? ' is-readonly' : ''}`}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: stagger, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={{
-        y: -3,
-        boxShadow: '0 14px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,162,39,0.22)',
-        transition: { duration: 0.2 },
-      }}
+      whileHover={
+        readOnly
+          ? undefined
+          : {
+              y: -3,
+              boxShadow: '0 14px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(212,175,55,0.28)',
+              transition: { duration: 0.2 },
+            }
+      }
     >
       <div className="card-main">
         <div className="card-top">
@@ -385,8 +560,9 @@ function TaskCard({
           >
             {STATUS_LABELS[task.status]}
           </motion.span>
+          {done && <span className="check-seal" aria-hidden>✓</span>}
         </div>
-        <h3>{task.activity}</h3>
+        <h3 className={done ? 'struck' : undefined}>{task.activity}</h3>
         <div className="card-meta">
           <div className="meta-row">
             <span className="meta-label">Vence</span>
@@ -416,27 +592,29 @@ function TaskCard({
         </div>
         {task.notes && <p className="notes-preview">{task.notes}</p>}
       </div>
-      <div className="card-actions">
-        <select
-          value={task.status}
-          onChange={(e) => onStatus(e.target.value as TaskStatus)}
-          aria-label="Cambiar estado"
-        >
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <button type="button" className="btn-ghost" onClick={onEditNotes}>
-          Notas
-        </button>
-        {task.status !== 'completada' && (
-          <button type="button" className="btn-seal btn-seal-sm" onClick={onDone}>
-            Hecha
+      {!readOnly && (
+        <div className="card-actions">
+          <select
+            value={task.status}
+            onChange={(e) => onStatus(e.target.value as TaskStatus)}
+            aria-label="Cambiar estado"
+          >
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn-ghost" onClick={onEditNotes}>
+            Notas
           </button>
-        )}
-      </div>
+          {task.status !== 'completada' && (
+            <button type="button" className="btn-seal btn-seal-sm" onClick={onDone}>
+              Hecha
+            </button>
+          )}
+        </div>
+      )}
     </motion.article>
   )
 }
@@ -457,8 +635,8 @@ function Modal({
         role="dialog"
         aria-modal
         aria-label={title}
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
         onClick={(e) => e.stopPropagation()}
       >
         <h2>{title}</h2>

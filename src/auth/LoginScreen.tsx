@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { FirebaseError } from 'firebase/app'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { motion } from 'framer-motion'
@@ -12,8 +12,11 @@ import {
   getFailCount,
   getLockoutUntil,
   isExpectedUsername,
+  isGuestPassword,
+  isGuestUsername,
   resetFailCount,
   setFailCount,
+  setGuestSession,
   setLockoutUntil,
 } from './session'
 
@@ -33,6 +36,8 @@ export function LoginScreen() {
   const [loading, setLoading] = useState(false)
   const [lockoutUntil, setLockoutUntilState] = useState(() => getLockoutUntil())
   const [now, setNow] = useState(() => Date.now())
+  const userRef = useRef<HTMLInputElement>(null)
+  const passRef = useRef<HTMLInputElement>(null)
 
   const locked = lockoutUntil > now
   const remainingSec = locked ? Math.max(0, Math.ceil((lockoutUntil - now) / 1000)) : 0
@@ -64,6 +69,10 @@ export function LoginScreen() {
     }
   }
 
+  const focusGuestHint = () => {
+    userRef.current?.focus()
+  }
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (locked || loading) return
@@ -71,6 +80,20 @@ export function LoginScreen() {
     setLoading(true)
 
     try {
+      // Guest: client session only — no Firebase user required
+      if (isGuestUsername(username)) {
+        if (!isGuestPassword(password)) {
+          registerFailure()
+          return
+        }
+        setGuestSession()
+        resetFailCount()
+        clearLockout()
+        setLockoutUntilState(0)
+        window.dispatchEvent(new Event('sangaku-guest'))
+        return
+      }
+
       if (!isExpectedUsername(username)) {
         registerFailure()
         return
@@ -98,7 +121,6 @@ export function LoginScreen() {
               )
               return
             }
-            // Retry next email only on user-not-found / invalid-credential
             if (
               (code === 'auth/user-not-found' || code === 'auth/invalid-credential') &&
               i < AUTH_EMAILS.length - 1
@@ -170,7 +192,7 @@ export function LoginScreen() {
       <div className="grain" aria-hidden />
       <motion.form
         className="login-gate"
-        onSubmit={handleSubmit}
+        onSubmit={(e) => void handleSubmit(e)}
         initial={{ opacity: 0, scale: 0.96, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
@@ -188,6 +210,7 @@ export function LoginScreen() {
         <div className="field">
           <label htmlFor="sangaku-user">Usuario</label>
           <input
+            ref={userRef}
             id="sangaku-user"
             type="text"
             autoComplete="username"
@@ -200,6 +223,7 @@ export function LoginScreen() {
         <div className="field">
           <label htmlFor="sangaku-pass">Contraseña</label>
           <input
+            ref={passRef}
             id="sangaku-pass"
             type="password"
             autoComplete="current-password"
@@ -211,9 +235,22 @@ export function LoginScreen() {
 
         {error && <div className="error-box">{error}</div>}
 
-        <button type="submit" className="btn-seal" disabled={loading}>
+        <motion.button
+          type="submit"
+          className="btn-seal"
+          disabled={loading}
+          whileHover={{ scale: 1.015, boxShadow: '0 0 28px rgba(212,175,55,0.28)' }}
+          whileTap={{ scale: 0.985 }}
+        >
           {loading ? 'Verificando sello…' : 'Abrir el portal'}
-        </button>
+        </motion.button>
+
+        <p className="guest-hint">
+          Acceso de invitado disponible ·{' '}
+          <button type="button" className="guest-hint-link" onClick={focusGuestHint}>
+            ¿Eres invitado?
+          </button>
+        </p>
       </motion.form>
     </div>
   )

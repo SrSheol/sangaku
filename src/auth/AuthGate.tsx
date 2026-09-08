@@ -9,11 +9,20 @@ import {
 } from 'react'
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { auth } from '../firebase'
-import { clearLockout } from './session'
+import {
+  clearGuestSession,
+  clearLockout,
+  getGuestSession,
+  type AuthRole,
+} from './session'
 import { LoginScreen } from './LoginScreen'
+import { BootSequence } from './BootSequence'
 
 interface AuthContextValue {
-  user: User
+  user: User | null
+  role: AuthRole
+  isGuest: boolean
+  isAdmin: boolean
   logout: () => Promise<void>
 }
 
@@ -25,25 +34,57 @@ interface Props {
 
 export function AuthGate({ children }: Props) {
   const [user, setUser] = useState<User | null>(null)
+  const [guest, setGuest] = useState(() => getGuestSession())
   const [ready, setReady] = useState(false)
+  const [booted, setBooted] = useState(false)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (next) => {
       setUser(next)
+      if (next) {
+        clearGuestSession()
+        setGuest(false)
+      }
       setReady(true)
     })
     return () => unsub()
   }, [])
 
-  const logout = useCallback(async () => {
-    clearLockout()
-    await signOut(auth)
+  // Re-check guest when LoginScreen sets session (custom event)
+  useEffect(() => {
+    const onGuest = () => setGuest(getGuestSession())
+    window.addEventListener('sangaku-guest', onGuest)
+    return () => window.removeEventListener('sangaku-guest', onGuest)
   }, [])
 
+  const logout = useCallback(async () => {
+    clearLockout()
+    clearGuestSession()
+    setGuest(false)
+    if (auth.currentUser) {
+      await signOut(auth)
+    }
+  }, [])
+
+  const role: AuthRole | null = user ? 'admin' : guest ? 'guest' : null
+
   const value = useMemo(
-    () => (user ? { user, logout } : null),
-    [user, logout],
+    () =>
+      role
+        ? {
+            user,
+            role,
+            isGuest: role === 'guest',
+            isAdmin: role === 'admin',
+            logout,
+          }
+        : null,
+    [user, role, logout],
   )
+
+  if (!booted) {
+    return <BootSequence onDone={() => setBooted(true)} />
+  }
 
   if (!ready) {
     return (
@@ -54,7 +95,7 @@ export function AuthGate({ children }: Props) {
     )
   }
 
-  if (!user || !value) {
+  if (!role || !value) {
     return <LoginScreen />
   }
 
