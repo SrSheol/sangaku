@@ -7,7 +7,10 @@ import {
   type ReactNode,
 } from 'react'
 import { AnimatePresence, motion, useSpring, useTransform } from 'framer-motion'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useAuth } from '../auth/AuthGate'
+import { useLenis } from '../hooks/useLenis'
 import { EXPECTED_USER, GUEST_USER, loadStoredFilters, saveStoredFilters } from '../auth/session'
 import { CATEGORIES, CATEGORY_LABELS, STATUS_LABELS, STATUSES } from '../lib/constants'
 import { formatDay, urgencyLevel, daysUntilDue } from '../lib/dates'
@@ -37,6 +40,8 @@ const defaultFilters: TaskFilters = {
 }
 
 const STAGGER_LIMIT = 18
+
+gsap.registerPlugin(ScrollTrigger)
 
 function parseFilters(raw: string | null): TaskFilters {
   if (!raw) return defaultFilters
@@ -83,6 +88,10 @@ export function Dashboard() {
   const [notesDraft, setNotesDraft] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const boardRef = useRef<HTMLDivElement>(null)
+
+  useLenis(true)
+
 
   const persist = useCallback((next: Task[]) => {
     setTasks(next)
@@ -151,6 +160,35 @@ export function Dashboard() {
 
   const displayActiveGroups = isGuest ? guestActiveGroups : activeGroups
 
+  useEffect(() => {
+    if (loading || !boardRef.current) return
+    const sections = boardRef.current.querySelectorAll('.reveal-section')
+    const triggers: ScrollTrigger[] = []
+    sections.forEach((el) => {
+      const tween = gsap.fromTo(
+        el,
+        { opacity: 0, y: 28 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.9,
+          ease: 'power2.out',
+          scrollTrigger: {
+            trigger: el,
+            start: 'top 88%',
+            toggleActions: 'play none none none',
+          },
+        },
+      )
+      if (tween.scrollTrigger) triggers.push(tween.scrollTrigger)
+    })
+    ScrollTrigger.refresh()
+    return () => {
+      triggers.forEach((t) => t.kill())
+    }
+  }, [loading, filtered.length, filters.groupByCategory, filters.status])
+
+
   const updateTask = async (id: string, patch: Partial<Task>) => {
     if (!isAdmin) return
     const next = tasks.map((t) =>
@@ -217,11 +255,7 @@ export function Dashboard() {
       <div className="grain" aria-hidden />
       <header className="topbar">
         <div className="brand-block">
-          <div className="torii-mini" aria-hidden>
-            <span />
-            <span />
-            <span />
-          </div>
+          <span className="brand-mark" aria-hidden />
           <div>
             <h1>
               Sangaku <span className="jp">算額</span>
@@ -286,9 +320,9 @@ export function Dashboard() {
           <motion.article
             key={k.label}
             className={`kpi-card tone-${k.tone}`}
-            initial={{ opacity: 0, y: 14, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ delay: i * 0.05, type: 'spring', stiffness: 260, damping: 22 }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.07, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           >
             <p>{k.label}</p>
             <CountUp value={loading ? 0 : k.value} />
@@ -359,7 +393,7 @@ export function Dashboard() {
         </p>
       </motion.section>
 
-      <div className="task-board">
+      <div className="task-board" ref={boardRef}>
         {loading ? (
           <div className="skeleton-list" aria-busy aria-label="Cargando tareas">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -383,7 +417,7 @@ export function Dashboard() {
             {completed.length > 0 && filters.status !== 'asignada' && filters.status !== 'en_proceso' && filters.status !== 'cancelada' && (
               <motion.section
                 key="completed"
-                className="category-block section-completed"
+                className="category-block section-completed reveal-section"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
@@ -420,7 +454,7 @@ export function Dashboard() {
               active.length > 0 && (
                 <motion.section
                   key="active-wrap"
-                  className="category-block"
+                  className="category-block reveal-section"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
@@ -542,9 +576,8 @@ function TaskCard({
         readOnly
           ? undefined
           : {
-              y: -3,
-              boxShadow: '0 14px 36px rgba(0,0,0,0.55), 0 0 0 1px rgba(212,175,55,0.28)',
-              transition: { duration: 0.2 },
+              y: -2,
+              transition: { duration: 0.25 },
             }
       }
     >

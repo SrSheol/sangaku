@@ -80,7 +80,6 @@ export function LoginScreen() {
     setLoading(true)
 
     try {
-      // Guest: client session only — no Firebase user required
       if (isGuestUsername(username)) {
         if (!isGuestPassword(password)) {
           registerFailure()
@@ -164,22 +163,15 @@ export function LoginScreen() {
         <motion.div
           className="login-gate lockout-panel"
           role="alert"
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="torii-mark" aria-hidden>
-            <span />
-            <span />
-            <span />
-          </div>
+          <span className="login-mark" aria-hidden />
           <p className="gate-kicker">門 · cerrado</p>
           <h1 className="gate-title">El sello permanece</h1>
-          <p className="gate-msg">
-            Demasiados intentos inválidos.
-            <br />
-            El portal se reabre en breve.
-          </p>
+          <p className="gate-editorial">Demasiados intentos inválidos</p>
+          <p className="gate-msg">El portal se reabre en breve.</p>
           <p className="lockout-countdown">{String(remainingSec).padStart(2, '0')}s</p>
         </motion.div>
       </div>
@@ -193,18 +185,15 @@ export function LoginScreen() {
       <motion.form
         className="login-gate"
         onSubmit={(e) => void handleSubmit(e)}
-        initial={{ opacity: 0, scale: 0.96, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.95, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="torii-mark" aria-hidden>
-          <span />
-          <span />
-          <span />
-        </div>
         <div className="login-brand">
+          <span className="login-mark" aria-hidden />
           <p className="gate-kicker">算額 · Sangaku</p>
           <h1 className="gate-title">Sello de acceso</h1>
+          <p className="gate-editorial">quiet path · 和</p>
         </div>
 
         <div className="field">
@@ -239,8 +228,8 @@ export function LoginScreen() {
           type="submit"
           className="btn-seal"
           disabled={loading}
-          whileHover={{ scale: 1.015, boxShadow: '0 0 28px rgba(212,175,55,0.28)' }}
-          whileTap={{ scale: 0.985 }}
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
         >
           {loading ? 'Verificando sello…' : 'Abrir el portal'}
         </motion.button>

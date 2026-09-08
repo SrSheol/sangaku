@@ -6,10 +6,11 @@ interface Props {
   onDone: () => void
 }
 
-const DURATION_MS = 2200
+const DURATION_MS = 2800
 
 export function BootSequence({ onDone }: Props) {
   const [visible, setVisible] = useState(() => !hasSeenBoot())
+  const [lineDrawn, setLineDrawn] = useState(false)
   const finished = useRef(false)
 
   const finish = () => {
@@ -17,7 +18,7 @@ export function BootSequence({ onDone }: Props) {
     finished.current = true
     markBootSeen()
     setVisible(false)
-    window.setTimeout(onDone, 520)
+    window.setTimeout(onDone, 600)
   }
 
   useEffect(() => {
@@ -28,8 +29,12 @@ export function BootSequence({ onDone }: Props) {
       }
       return
     }
+    const lineId = window.setTimeout(() => setLineDrawn(true), 280)
     const id = window.setTimeout(finish, DURATION_MS)
-    return () => window.clearTimeout(id)
+    return () => {
+      window.clearTimeout(lineId)
+      window.clearTimeout(id)
+    }
   }, [visible])
 
   return (
@@ -41,32 +46,32 @@ export function BootSequence({ onDone }: Props) {
           onClick={finish}
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="boot-wash" aria-hidden />
           <div className="grain" aria-hidden />
-          <motion.div
-            className="boot-seal"
-            initial={{ scale: 0.7, opacity: 0, rotate: -8 }}
-            animate={{ scale: 1, opacity: 1, rotate: 0 }}
-            transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
+          <motion.p
+            className="boot-kanji"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 0.92, y: 0 }}
+            transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
           >
-            <span className="boot-seal-ring" />
-            <span className="boot-seal-kanji">算</span>
-          </motion.div>
+            和
+          </motion.p>
+          <div className={`boot-line${lineDrawn ? ' is-drawn' : ''}`} aria-hidden />
           <motion.p
             className="boot-title"
-            initial={{ opacity: 0, y: 12, letterSpacing: '0.5em' }}
-            animate={{ opacity: 1, y: 0, letterSpacing: '0.28em' }}
-            transition={{ delay: 0.35, duration: 0.9 }}
+            initial={{ opacity: 0, y: 10, letterSpacing: '0.55em' }}
+            animate={{ opacity: 1, y: 0, letterSpacing: '0.42em' }}
+            transition={{ delay: 0.45, duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
           >
             Sangaku <em>算額</em>
           </motion.p>
           <motion.p
             className="boot-skip"
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0.55 }}
-            transition={{ delay: 0.9 }}
+            animate={{ opacity: 0.5 }}
+            transition={{ delay: 1.2, duration: 0.8 }}
           >
             tocar para continuar
           </motion.p>

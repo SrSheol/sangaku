@@ -86,18 +86,18 @@ export function LoginBackground() {
         h * 0.5,
         Math.max(w, h) * 0.78,
       )
-      g.addColorStop(0, '#2a1c12')
-      g.addColorStop(0.45, '#16100c')
-      g.addColorStop(1, '#070605')
+      g.addColorStop(0, '#1c1912')
+      g.addColorStop(0.45, '#12100a')
+      g.addColorStop(1, '#0a0801')
       ctx.fillStyle = g
       ctx.fillRect(0, 0, w, h)
 
       for (const m of motifs) {
         const pulse = 0.5 + 0.5 * Math.sin(t * m.speed + m.phase)
-        const alpha = 0.045 + pulse * 0.09
+        const alpha = 0.03 + pulse * 0.06
         const ox = m.x + px * 0.4
         const oy = m.y + py * 0.4 + Math.sin(t * m.speed + m.phase) * 5
-        ctx.strokeStyle = `rgba(212, 175, 55, ${alpha})`
+        ctx.strokeStyle = `rgba(202, 161, 0, ${alpha})`
         ctx.lineWidth = 1
         ctx.beginPath()
         if (m.kind === 'circle') {
@@ -121,7 +121,7 @@ export function LoginBackground() {
         if (m.kind === 'circle' && pulse > 0.72) {
           ctx.beginPath()
           ctx.arc(ox, oy, m.r * 0.32, 0, Math.PI * 2)
-          ctx.strokeStyle = `rgba(168, 120, 55, ${alpha * 1.35})`
+          ctx.strokeStyle = `rgba(202, 161, 0, ${alpha * 1.2})`
           ctx.stroke()
         }
       }
@@ -136,7 +136,7 @@ export function LoginBackground() {
         Math.max(w, h) * 0.72,
       )
       vg.addColorStop(0, 'rgba(0,0,0,0)')
-      vg.addColorStop(1, 'rgba(20, 10, 4, 0.55)')
+      vg.addColorStop(1, 'rgba(10, 8, 1, 0.55)')
       ctx.fillStyle = vg
       ctx.fillRect(0, 0, w, h)
     }
