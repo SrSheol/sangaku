@@ -96,4 +96,5 @@ export const DEFAULT_PREFS: Preferences = {
   cursor: true,
   sound: false,
   density: 'comfortable',
+  theme: 'dark',
 }

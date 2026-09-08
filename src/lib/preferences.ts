@@ -20,6 +20,7 @@ export function loadPreferences(): Preferences {
       cursor: typeof parsed.cursor === 'boolean' ? parsed.cursor : DEFAULT_PREFS.cursor,
       sound: Boolean(parsed.sound),
       density: parsed.density === 'compact' ? 'compact' : 'comfortable',
+      theme: parsed.theme === 'light' ? 'light' : 'dark',
     }
   } catch {
     return { ...DEFAULT_PREFS }
@@ -82,4 +83,9 @@ export function makeSavedFilter(name: string, filters: TaskFilters): SavedFilter
     filters: { ...filters },
     createdAt: new Date().toISOString(),
   }
+}
+
+
+export function applyTheme(theme: Preferences['theme']): void {
+  document.documentElement.dataset.theme = theme
 }

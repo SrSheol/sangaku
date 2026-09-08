@@ -59,6 +59,72 @@
   --bar-h: 4.6rem;
 }
 
+
+/* ============================================================
+   Light theme · washi day — sumi ink on kinari paper
+   ============================================================ */
+[data-theme="light"] {
+  --sumi: #f4ead4;
+  --sumi-2: #efe3c7;
+  --sumi-3: #e6d6b0;
+  --sumi-soft: rgba(244, 234, 212, 0.92);
+
+  --washi: #1a1612;
+  --washi-2: #2a241c;
+  --washi-dim: #5c5346;
+  --washi-glass: rgba(26, 22, 18, 0.05);
+  --washi-glass-strong: rgba(26, 22, 18, 0.09);
+
+  --suzuri: #5a6168;
+  --suzuri-soft: rgba(90, 97, 104, 0.22);
+
+  --vermillion: #b33a26;
+  --vermillion-deep: #7a2818;
+  --vermillion-soft: rgba(179, 58, 38, 0.4);
+  --gold: #9a7838;
+  --gold-bright: #b8923f;
+  --gold-hairline: rgba(154, 120, 56, 0.45);
+  --kintsugi: linear-gradient(120deg, #8a6a2c, #d4b05a 45%, #8a6a2c);
+
+  --st-neutral: #6b7178;
+  --st-progress: #9a7838;
+  --st-done: #5a6e52;
+  --st-cancel: #8a4034;
+
+  --hairline: rgba(154, 120, 56, 0.35);
+  --ink-line: rgba(26, 22, 18, 0.16);
+  --shadow-deep: 0 22px 48px rgba(60, 45, 20, 0.18), inset 0 1px 0 rgba(255, 250, 240, 0.55);
+  --shadow-soft: 0 10px 24px rgba(60, 45, 20, 0.12);
+
+  --paper-panel: linear-gradient(165deg, rgba(255, 250, 240, 0.92), rgba(244, 234, 212, 0.78) 60%, rgba(193, 68, 44, 0.04));
+  --paper-panel-deep: linear-gradient(165deg, rgba(255, 252, 244, 0.96), rgba(236, 222, 190, 0.9));
+}
+
+[data-theme="light"] body {
+  color: var(--washi);
+  background: var(--sumi);
+}
+
+[data-theme="light"] ::selection {
+  background: var(--vermillion-soft);
+  color: #fff8ee;
+}
+
+[data-theme="light"] .koi-fish {
+  color: var(--washi);
+  opacity: 0.1;
+}
+
+[data-theme="light"] .koi-fish.is-vermillion {
+  color: var(--vermillion);
+  opacity: 0.14;
+}
+
+[data-theme="light"] .grain {
+  opacity: 0.04;
+  mix-blend-mode: multiply;
+}
+
 *,
 *::before,
 *::after {

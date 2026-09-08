@@ -32,6 +32,7 @@ import {
   upsertTaskRemote,
 } from '../lib/tasks'
 import {
+  applyTheme,
   loadPreferences,
   loadSavedFilters,
   loadView,
@@ -158,6 +159,7 @@ export function Dashboard() {
   useEffect(() => {
     document.documentElement.dataset.density = prefs.density
     document.documentElement.classList.toggle('reduce-motion', prefs.reduceMotion)
+    applyTheme(prefs.theme)
   }, [prefs])
 
   const persist = useCallback((next: Task[]) => {
@@ -403,6 +405,17 @@ export function Dashboard() {
         <div className="rail-spacer" aria-hidden />
 
         <div className="rail-tools">
+          <button
+            type="button"
+            className="rail-tool"
+            title={prefs.theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+            aria-label={prefs.theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            onClick={() =>
+              setPrefs((p) => ({ ...p, theme: p.theme === 'dark' ? 'light' : 'dark' }))
+            }
+          >
+            {prefs.theme === 'dark' ? '明' : '暗'}
+          </button>
           <button
             type="button"
             className="rail-tool"

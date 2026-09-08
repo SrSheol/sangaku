@@ -42,6 +42,21 @@ export function PreferencesPanel({
           Audio ambiental
         </label>
         <label>
+          Tema
+          <select
+            value={prefs.theme}
+            onChange={(e) =>
+              onChange({
+                ...prefs,
+                theme: e.target.value === 'light' ? 'light' : 'dark',
+              })
+            }
+          >
+            <option value="dark">Oscuro · sumi</option>
+            <option value="light">Claro · washi</option>
+          </select>
+        </label>
+        <label>
           Densidad
           <select
             value={prefs.density}

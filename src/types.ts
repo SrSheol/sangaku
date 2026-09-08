@@ -47,11 +47,14 @@ export type AppView = 'list' | 'calendar' | 'kanban' | 'timeline'
 
 export type Density = 'comfortable' | 'compact'
 
+export type ThemeMode = 'dark' | 'light'
+
 export interface Preferences {
   reduceMotion: boolean
   cursor: boolean
   sound: boolean
   density: Density
+  theme: ThemeMode
 }
 
 export interface SavedFilter {
