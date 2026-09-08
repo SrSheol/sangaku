@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { auth } from '../firebase'
 import { LoginBackground } from './LoginBackground'
 import {
-  AUTH_EMAIL,
+  AUTH_EMAILS,
   LOCKOUT_MS,
   MAX_ATTEMPTS,
   clearLockout,
@@ -16,6 +16,15 @@ import {
   setFailCount,
   setLockoutUntil,
 } from './session'
+
+function isCredentialError(code: string): boolean {
+  return (
+    code === 'auth/wrong-password' ||
+    code === 'auth/invalid-credential' ||
+    code === 'auth/user-not-found' ||
+    code === 'auth/invalid-email'
+  )
+}
 
 export function LoginScreen() {
   const [username, setUsername] = useState('')
@@ -67,32 +76,58 @@ export function LoginScreen() {
         return
       }
 
-      await signInWithEmailAndPassword(auth, AUTH_EMAIL, password)
-      resetFailCount()
-      clearLockout()
-      setLockoutUntilState(0)
-    } catch (err) {
-      if (err instanceof FirebaseError) {
-        const code = err.code
-        if (
-          code === 'auth/configuration-not-found' ||
-          code === 'auth/operation-not-allowed'
-        ) {
-          setError(
-            'Authentication no está listo. En Firebase Console: habilita Email/Password y crea el usuario sheol@sangaku.app. Añade el dominio autorizado srsheol.github.io.',
-          )
-          return
-        }
-        if (
-          code === 'auth/wrong-password' ||
-          code === 'auth/invalid-credential' ||
-          code === 'auth/user-not-found' ||
-          code === 'auth/invalid-email'
-        ) {
+      let lastErr: unknown = null
+      let signedIn = false
+
+      for (let i = 0; i < AUTH_EMAILS.length; i++) {
+        const email = AUTH_EMAILS[i]
+        try {
+          await signInWithEmailAndPassword(auth, email, password)
+          signedIn = true
+          break
+        } catch (err) {
+          lastErr = err
+          if (err instanceof FirebaseError) {
+            const code = err.code
+            if (
+              code === 'auth/configuration-not-found' ||
+              code === 'auth/operation-not-allowed'
+            ) {
+              setError(
+                'Authentication no está listo. En Firebase Console: habilita Email/Password, crea el usuario de acceso y añade el dominio autorizado srsheol.github.io.',
+              )
+              return
+            }
+            // Retry next email only on user-not-found / invalid-credential
+            if (
+              (code === 'auth/user-not-found' || code === 'auth/invalid-credential') &&
+              i < AUTH_EMAILS.length - 1
+            ) {
+              continue
+            }
+            if (isCredentialError(code)) {
+              registerFailure()
+              return
+            }
+          }
           registerFailure()
           return
         }
       }
+
+      if (!signedIn) {
+        if (lastErr instanceof FirebaseError && isCredentialError(lastErr.code)) {
+          registerFailure()
+        } else {
+          registerFailure()
+        }
+        return
+      }
+
+      resetFailCount()
+      clearLockout()
+      setLockoutUntilState(0)
+    } catch {
       registerFailure()
     } finally {
       setLoading(false)
@@ -146,9 +181,8 @@ export function LoginScreen() {
           <span />
         </div>
         <div className="login-brand">
-          <p className="gate-kicker">算額 · temple tablet</p>
-          <h1 className="gate-title">Sangaku</h1>
-          <p className="gate-sub">Pendientes · sello de acceso</p>
+          <p className="gate-kicker">算額 · Sangaku</p>
+          <h1 className="gate-title">Sello de acceso</h1>
         </div>
 
         <div className="field">
@@ -160,7 +194,6 @@ export function LoginScreen() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             disabled={loading}
-            placeholder="Sheol"
           />
         </div>
 
@@ -181,8 +214,6 @@ export function LoginScreen() {
         <button type="submit" className="btn-seal" disabled={loading}>
           {loading ? 'Verificando sello…' : 'Abrir el portal'}
         </button>
-
-        <p className="gate-footer">Juan Manuel Saucedo Rosas · badge 9</p>
       </motion.form>
     </div>
   )

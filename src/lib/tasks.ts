@@ -12,6 +12,7 @@ import type { SeedFile, Task, TaskFilters, TaskStatus } from '../types'
 import { daysUntilDue, todayInMexico, urgencyLevel } from './dates'
 
 const seed = seedFile as SeedFile
+const BATCH_CHUNK = 400
 
 export function loadLocalTasks(): Task[] {
   try {
@@ -44,8 +45,69 @@ export function getSeedTasks(): Task[] {
   return seed.tasks.map((t) => ({ ...t }))
 }
 
+export function seedCount(): number {
+  return seed.tasks.length
+}
+
 export function seedMeta() {
   return seed.meta
+}
+
+function taskRichness(t: Task): number {
+  let score = 0
+  if (t.activity?.trim()) score += 3
+  if (t.ot?.trim()) score += 2
+  if (t.assigner?.trim()) score += 1
+  if (t.dueAt?.trim()) score += 1
+  if (t.assignedAt?.trim()) score += 1
+  if (t.notes?.trim()) score += 1
+  if (t.category) score += 1
+  if (t.status) score += 1
+  return score
+}
+
+function preferTask(a: Task, b: Task): Task {
+  const aTs = a.updatedAt ? Date.parse(a.updatedAt) : NaN
+  const bTs = b.updatedAt ? Date.parse(b.updatedAt) : NaN
+  const aHas = Number.isFinite(aTs)
+  const bHas = Number.isFinite(bTs)
+  if (aHas && bHas) return aTs >= bTs ? a : b
+  if (aHas && !bHas) return a
+  if (bHas && !aHas) return b
+  return taskRichness(a) >= taskRichness(b) ? a : b
+}
+
+/** Merge remote + local + seed by id; newer updatedAt wins, else richer task. */
+export function mergeTaskSets(...sets: (Task[] | null | undefined)[]): Task[] {
+  const map = new Map<string, Task>()
+  for (const set of sets) {
+    if (!set) continue
+    for (const t of set) {
+      if (!t?.id) continue
+      const prev = map.get(t.id)
+      map.set(t.id, prev ? preferTask(prev, t) : t)
+    }
+  }
+  return [...map.values()]
+}
+
+async function writeTasksBatch(
+  tasks: Task[],
+  mode: 'merge' | 'overwrite' = 'merge',
+): Promise<void> {
+  for (let i = 0; i < tasks.length; i += BATCH_CHUNK) {
+    const batch = writeBatch(db)
+    const slice = tasks.slice(i, i + BATCH_CHUNK)
+    for (const t of slice) {
+      const ref = doc(db, FIRESTORE_COLLECTION, t.id)
+      if (mode === 'overwrite') {
+        batch.set(ref, t)
+      } else {
+        batch.set(ref, t, { merge: true })
+      }
+    }
+    await batch.commit()
+  }
 }
 
 export async function fetchFirestoreTasks(): Promise<Task[] | null> {
@@ -70,32 +132,126 @@ export async function upsertTaskRemote(task: Task): Promise<boolean> {
   }
 }
 
-/** Carga seed a Firestore solo si la colección está vacía. */
-export async function syncSeedToFirestore(): Promise<{ ok: boolean; count: number; message: string }> {
+/**
+ * On load: merge remote + local + seed.
+ * If merged count < seed count, fill missing seed tasks, persist local,
+ * and upsert missing docs to Firestore.
+ */
+export async function loadAndReconcileTasks(
+  localOverride?: Task[],
+): Promise<{ tasks: Task[]; toast: string }> {
+  const local = localOverride ?? loadLocalTasks()
+  const seededLocal = local.length > 0 ? local : getSeedTasks()
+  if (local.length === 0) saveLocalTasks(seededLocal)
+
+  const remote = await fetchFirestoreTasks()
+  const seedTasks = getSeedTasks()
+  const expected = seedTasks.length
+
+  // Never replace with a tiny remote subset — always merge
+  let merged = mergeTaskSets(remote ?? [], seededLocal, seedTasks)
+
+  const missingSeed = seedTasks.filter((s) => !merged.some((m) => m.id === s.id))
+  if (merged.length < expected && missingSeed.length > 0) {
+    merged = mergeTaskSets(merged, missingSeed)
+    saveLocalTasks(merged)
+    try {
+      await writeTasksBatch(missingSeed, 'merge')
+    } catch {
+      // local already saved; remote upsert best-effort
+    }
+    return {
+      tasks: merged,
+      toast: `Reconciliado: ${merged.length} tareas (se restauraron ${missingSeed.length} del seed)`,
+    }
+  }
+
+  saveLocalTasks(merged)
+
+  if (remote === null) {
+    return { tasks: merged, toast: 'Modo local (Firestore no disponible)' }
+  }
+  if ((remote?.length ?? 0) > 0 && (remote?.length ?? 0) < expected) {
+    return {
+      tasks: merged,
+      toast: `Fusionado local+remoto+seed · ${merged.length} tareas`,
+    }
+  }
+  if ((remote?.length ?? 0) > 0) {
+    return { tasks: merged, toast: `Sincronizado · ${merged.length} tareas` }
+  }
+  return { tasks: merged, toast: '' }
+}
+
+/**
+ * Carga seed a Firestore: si vacío, escribe todo;
+ * si hay docs pero count < seed, añade solo ids faltantes (no se niega).
+ */
+export async function syncSeedToFirestore(): Promise<{
+  ok: boolean
+  count: number
+  message: string
+}> {
   try {
     const snap = await getDocs(collection(db, FIRESTORE_COLLECTION))
-    if (!snap.empty) {
-      return {
-        ok: false,
-        count: snap.size,
-        message: `Firestore ya tiene ${snap.size} documentos. No se sobrescribe.`,
-      }
-    }
     const tasks = getSeedTasks()
-    const CHUNK = 400
-    for (let i = 0; i < tasks.length; i += CHUNK) {
-      const batch = writeBatch(db)
-      const slice = tasks.slice(i, i + CHUNK)
-      for (const t of slice) {
-        batch.set(doc(db, FIRESTORE_COLLECTION, t.id), t)
+    const existingIds = new Set(snap.docs.map((d) => d.id))
+
+    if (snap.empty) {
+      await writeTasksBatch(tasks, 'overwrite')
+      saveLocalTasks(tasks)
+      return {
+        ok: true,
+        count: tasks.length,
+        message: `Se cargaron ${tasks.length} tareas a Firestore.`,
       }
-      await batch.commit()
     }
-    saveLocalTasks(tasks)
-    return { ok: true, count: tasks.length, message: `Se cargaron ${tasks.length} tareas a Firestore.` }
+
+    const missing = tasks.filter((t) => !existingIds.has(t.id))
+    if (missing.length === 0) {
+      return {
+        ok: true,
+        count: snap.size,
+        message: `Firestore ya tiene ${snap.size} documentos; no faltan ids del seed.`,
+      }
+    }
+
+    await writeTasksBatch(missing, 'merge')
+    const local = mergeTaskSets(loadLocalTasks(), tasks)
+    saveLocalTasks(local)
+    return {
+      ok: true,
+      count: missing.length,
+      message: `Se añadieron ${missing.length} tareas faltantes a Firestore (${snap.size + missing.length} total).`,
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Error desconocido'
     return { ok: false, count: 0, message: `No se pudo sincronizar: ${msg}` }
+  }
+}
+
+/** Full reseed: 172 seed tasks → local + overwrite all seed docs in Firestore. */
+export async function forceReseedAll(): Promise<{
+  ok: boolean
+  tasks: Task[]
+  message: string
+}> {
+  const tasks = getSeedTasks()
+  saveLocalTasks(tasks)
+  try {
+    await writeTasksBatch(tasks, 'overwrite')
+    return {
+      ok: true,
+      tasks,
+      message: `Restauradas ${tasks.length} tareas (local + Firestore).`,
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Error desconocido'
+    return {
+      ok: false,
+      tasks,
+      message: `Seed local OK (${tasks.length}); Firestore falló: ${msg}`,
+    }
   }
 }
 
@@ -160,7 +316,6 @@ export function filterTasks(tasks: Task[], f: TaskFilters): Task[] {
         return a.activity.localeCompare(b.activity, 'es')
       case 'dueAsc':
       default: {
-        // vencidas primero, luego por fecha
         const da = daysUntilDue(a.dueAt)
         const db_ = daysUntilDue(b.dueAt)
         const ua = urgencyLevel(a.dueAt, a.status)

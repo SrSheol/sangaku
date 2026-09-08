@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../auth/AuthGate'
+import { EXPECTED_USER } from '../auth/session'
 import { CATEGORIES, CATEGORY_LABELS, STATUS_LABELS, STATUSES } from '../lib/constants'
 import { formatDay, urgencyLevel, daysUntilDue } from '../lib/dates'
 import {
   computeKpis,
-  fetchFirestoreTasks,
   filterTasks,
   forceLoadSeedLocal,
+  forceReseedAll,
   groupByCategory,
+  loadAndReconcileTasks,
   newTaskId,
   saveLocalTasks,
+  seedCount,
   seedLocalIfEmpty,
   seedMeta,
   syncSeedToFirestore,
@@ -26,8 +29,10 @@ const defaultFilters: TaskFilters = {
   groupByCategory: true,
 }
 
+const STAGGER_LIMIT = 20
+
 export function Dashboard() {
-  const { user, logout } = useAuth()
+  const { logout } = useAuth()
   const meta = seedMeta()
   const [tasks, setTasks] = useState<Task[]>(() => seedLocalIfEmpty())
   const [filters, setFilters] = useState<TaskFilters>(defaultFilters)
@@ -45,12 +50,11 @@ export function Dashboard() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const remote = await fetchFirestoreTasks()
-      if (cancelled || remote === null) return
-      if (remote.length > 0) {
-        persist(remote)
-        setToast('Sincronizado desde Firestore')
-      }
+      const { tasks: reconciled, toast: msg } = await loadAndReconcileTasks()
+      if (cancelled) return
+      // Never blindly replace with a tiny remote subset — reconcile merges
+      persist(reconciled)
+      if (msg) setToast(msg)
     })()
     return () => {
       cancelled = true
@@ -59,7 +63,7 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!toast) return
-    const id = window.setTimeout(() => setToast(''), 3200)
+    const id = window.setTimeout(() => setToast(''), 3800)
     return () => window.clearTimeout(id)
   }, [toast])
 
@@ -90,7 +94,18 @@ export function Dashboard() {
     const res = await syncSeedToFirestore()
     setBusy(false)
     setToast(res.message)
-    if (res.ok) persist(forceLoadSeedLocal())
+    if (res.ok) {
+      const { tasks: reconciled } = await loadAndReconcileTasks()
+      persist(reconciled)
+    }
+  }
+
+  const handleForceReseed = async () => {
+    setBusy(true)
+    const res = await forceReseedAll()
+    setBusy(false)
+    persist(res.tasks)
+    setToast(res.message)
   }
 
   const handleAdd = (draft: Omit<Task, 'id' | 'collaborator' | 'badge'>) => {
@@ -109,7 +124,12 @@ export function Dashboard() {
   }
 
   return (
-    <div className="app-shell">
+    <motion.div
+      className="app-shell"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.45 }}
+    >
       <div className="grain" aria-hidden />
       <header className="topbar">
         <div className="brand-block">
@@ -122,18 +142,26 @@ export function Dashboard() {
             <h1>
               Sangaku <span className="jp">算額</span>
             </h1>
-            <p>
-              {meta.collaborator} · badge {meta.badge}
-            </p>
+            <p>Pendientes · {tasks.length} tareas</p>
           </div>
         </div>
         <div className="topbar-actions">
-          <span className="user-chip">{user.email}</span>
+          <span className="user-chip" title="Sesión activa">
+            Sesión · {EXPECTED_USER}
+          </span>
           <button type="button" className="btn-ghost" onClick={() => setShowAdd(true)}>
             + Tarea
           </button>
           <button type="button" className="btn-ghost" onClick={handleSeedLocal}>
             Cargar seed
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={busy}
+            onClick={() => void handleForceReseed()}
+          >
+            {busy ? 'Restaurando…' : `Restaurar ${seedCount()}`}
           </button>
           <button
             type="button"
@@ -170,7 +198,11 @@ export function Dashboard() {
         ))}
       </section>
 
-      <section className="filters glass-panel">
+      <motion.section
+        className="filters glass-panel"
+        layout
+        transition={{ duration: 0.25 }}
+      >
         <input
           className="search"
           placeholder="Buscar actividad, OT, asignador…"
@@ -226,20 +258,27 @@ export function Dashboard() {
         <p className="filter-count">
           {filtered.length} / {tasks.length}
         </p>
-      </section>
+      </motion.section>
 
       <div className="task-board">
-        {groups.map((g) => (
-          <section key={g.category} className="category-block">
-            {filters.groupByCategory && (
-              <h2 className="category-title">
-                <span className="hairline" />
-                {CATEGORY_LABELS[g.category as TaskCategory] ?? g.category}
-                <span className="count">{g.tasks.length}</span>
-              </h2>
-            )}
-            <div className="card-grid">
-              <AnimatePresence mode="popLayout">
+        <AnimatePresence mode="wait">
+          {groups.map((g) => (
+            <motion.section
+              key={g.category}
+              className="category-block"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {filters.groupByCategory && (
+                <h2 className="category-title">
+                  <span className="hairline" />
+                  {CATEGORY_LABELS[g.category as TaskCategory] ?? g.category}
+                  <span className="count">{g.tasks.length}</span>
+                </h2>
+              )}
+              <div className="card-list">
                 {g.tasks.map((task, idx) => (
                   <TaskCard
                     key={task.id}
@@ -253,11 +292,11 @@ export function Dashboard() {
                     }}
                   />
                 ))}
-              </AnimatePresence>
-            </div>
-            {g.tasks.length === 0 && <p className="empty-hint">Sin tareas en este filtro.</p>}
-          </section>
-        ))}
+              </div>
+              {g.tasks.length === 0 && <p className="empty-hint">Sin tareas en este filtro.</p>}
+            </motion.section>
+          ))}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>
@@ -301,7 +340,7 @@ export function Dashboard() {
       )}
 
       {showAdd && <AddTaskModal onClose={() => setShowAdd(false)} onSave={handleAdd} />}
-    </div>
+    </motion.div>
   )
 }
 
@@ -320,33 +359,63 @@ function TaskCard({
 }) {
   const urg = urgencyLevel(task.dueAt, task.status)
   const days = daysUntilDue(task.dueAt)
+  const stagger = index < STAGGER_LIMIT ? index * 0.028 : 0
 
   return (
     <motion.article
-      layout
       className={`task-card urg-${urg}`}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ delay: Math.min(index, 12) * 0.03, duration: 0.35 }}
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      transition={{ delay: stagger, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{
+        y: -3,
+        boxShadow: '0 14px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,162,39,0.22)',
+        transition: { duration: 0.2 },
+      }}
     >
-      <div className="card-top">
-        <span className="ot-badge">OT {task.ot}</span>
-        <span className={`status-pill status-${task.status}`}>{STATUS_LABELS[task.status]}</span>
+      <div className="card-main">
+        <div className="card-top">
+          <span className="ot-badge">OT {task.ot}</span>
+          <motion.span
+            key={task.status}
+            className={`status-pill status-${task.status}`}
+            initial={{ scale: 0.85, opacity: 0.6 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+          >
+            {STATUS_LABELS[task.status]}
+          </motion.span>
+        </div>
+        <h3>{task.activity}</h3>
+        <div className="card-meta">
+          <div className="meta-row">
+            <span className="meta-label">Vence</span>
+            <span className={`due due-${urg}`}>
+              {formatDay(task.dueAt)}
+              {days !== null && urg !== 'done' && (
+                <em>
+                  {' '}
+                  ·{' '}
+                  {days < 0
+                    ? `${Math.abs(days)}d vencida`
+                    : days === 0
+                      ? 'hoy'
+                      : `${days}d`}
+                </em>
+              )}
+            </span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-label">Asignó</span>
+            <span>{task.assigner}</span>
+          </div>
+          <div className="meta-row">
+            <span className="meta-label">Asignada</span>
+            <span>{formatDay(task.assignedAt)}</span>
+          </div>
+        </div>
+        {task.notes && <p className="notes-preview">{task.notes}</p>}
       </div>
-      <h3>{task.activity}</h3>
-      <div className="card-meta">
-        <span>Asignó: {task.assigner}</span>
-        <span>Asignada: {formatDay(task.assignedAt)}</span>
-        <span className={`due due-${urg}`}>
-          Vence: {formatDay(task.dueAt)}
-          {days !== null && urg !== 'done' && (
-            <em> · {days < 0 ? `${Math.abs(days)}d vencida` : days === 0 ? 'hoy' : `${days}d`}</em>
-          )}
-        </span>
-      </div>
-      {task.notes && <p className="notes-preview">{task.notes}</p>}
       <div className="card-actions">
         <select
           value={task.status}

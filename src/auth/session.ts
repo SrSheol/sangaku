@@ -1,9 +1,10 @@
 export const FAIL_COUNT_KEY = 'sangaku-fail-count'
 export const LOCKOUT_UNTIL_KEY = 'sangaku-lockout-until'
 
-/** Usuario UI (case-insensitive); mapea a sheol@sangaku.app */
+/** Usuario UI (case-insensitive); mapea a AUTH_EMAILS */
 export const EXPECTED_USER = 'Sheol'
 export const AUTH_EMAIL = 'sheol@sangaku.app'
+export const AUTH_EMAILS = ['sheol@sangaku.app', 'sheol@forge-console.app'] as const
 
 export const MAX_ATTEMPTS = 3
 export const LOCKOUT_MS = 60_000
