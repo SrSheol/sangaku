@@ -53,6 +53,7 @@ import { PreferencesPanel } from './ui/PreferencesPanel'
 import { ShortcutsModal } from './ui/ShortcutsModal'
 import { TaskDetail } from './ui/TaskDetail'
 import { ListView } from './views/ListView'
+import { BrushDivider, KANJI_NUM, SealMark } from './ui/InkAssets'
 
 const AmbientScene = lazy(() => import('./ui/AmbientScene'))
 const CalendarView = lazy(() => import('./views/CalendarView').then((m) => ({ default: m.CalendarView })))
@@ -124,6 +125,7 @@ export function Dashboard() {
     typeof Notification === 'undefined' ? 'unsupported' : Notification.permission,
   )
   const [ambientPaused, setAmbientPaused] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const boardRef = useRef<HTMLDivElement>(null)
 
@@ -352,9 +354,11 @@ export function Dashboard() {
     filters.status === 'en_proceso' ||
     filters.status === 'cancelada'
 
+  const viewIndex: Record<AppView, number> = { list: 1, calendar: 2, kanban: 3, timeline: 4 }
+
   return (
     <motion.div
-      className="app-shell"
+      className="atelier"
       initial={prefs.reduceMotion ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
@@ -364,116 +368,164 @@ export function Dashboard() {
       </Suspense>
       <CustomCursor enabled={prefs.cursor && !prefs.reduceMotion} />
       <div className="grain" aria-hidden />
+      <div className="atelier-wash" aria-hidden />
 
-      <header className="topbar">
-        <div className="brand-block">
-          <span className="brand-mark" aria-hidden />
-          <div>
-            <h1>
-              Sangaku <span className="jp">算額</span>
-            </h1>
-            <p>Pendientes · {tasks.length} tareas · badge {meta.badge}</p>
-          </div>
+      <aside className="seal-rail">
+        <div className="rail-brand">
+          <SealMark size={46} />
+          <span className="rail-brand-label">算額</span>
         </div>
-        <div className="topbar-actions">
-          <span className="user-chip" title="Sesión activa">
-            Sesión · {sessionLabel}
-          </span>
+
+        <nav className="rail-views" aria-label="Vistas">
+          {(Object.keys(VIEW_LABELS) as AppView[]).map((v) => (
+            <button
+              key={v}
+              type="button"
+              className={`rail-view${view === v ? ' is-active' : ''}`}
+              onClick={() => setView(v)}
+              title={VIEW_LABELS[v]}
+            >
+              <span className="rail-num" aria-hidden>
+                {KANJI_NUM[viewIndex[v]]}
+              </span>
+              <span className="rail-label">{VIEW_LABELS[v]}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="rail-spacer" aria-hidden />
+
+        <div className="rail-tools">
           <button
             type="button"
-            className="btn-ghost"
-            title="Pausar fondo 3D"
-            onClick={() => setAmbientPaused((p) => !p)}
+            className="rail-tool"
+            title="Preferencias"
+            onClick={() => setShowPrefs(true)}
           >
-            {ambientPaused ? 'Fondo' : 'Pausar 3D'}
+            準
           </button>
-          <button type="button" className="btn-ghost" onClick={() => setShowPrefs(true)}>
-            Preferencias
-          </button>
-          <button type="button" className="btn-ghost" onClick={() => setShowShortcuts(true)}>
+          <button
+            type="button"
+            className="rail-tool"
+            title="Atajos de teclado"
+            onClick={() => setShowShortcuts(true)}
+          >
             ?
           </button>
+          <button
+            type="button"
+            className="rail-tool"
+            title={ambientPaused ? 'Reanudar fondo' : 'Pausar fondo'}
+            onClick={() => setAmbientPaused((p) => !p)}
+          >
+            {ambientPaused ? '止' : '動'}
+          </button>
           {isAdmin && (
-            <>
-              <button type="button" className="btn-ghost" onClick={() => setShowAdd(true)}>
-                + Tarea
-              </button>
-              <button type="button" className="btn-ghost" onClick={() => setShowImport(true)}>
-                Importar
-              </button>
-              <button type="button" className="btn-ghost" onClick={handleSeedLocal}>
-                Cargar seed
-              </button>
-              <button
-                type="button"
-                className="btn-ghost"
-                disabled={busy}
-                onClick={() => void handleForceReseed()}
-              >
-                {busy ? 'Restaurando…' : `Restaurar ${seedCount()}`}
-              </button>
-              <button
-                type="button"
-                className="btn-ghost"
-                disabled={busy}
-                onClick={() => void handleSyncFirestore()}
-              >
-                {busy ? 'Sincronizando…' : 'Sync Firestore'}
-              </button>
-            </>
+            <button
+              type="button"
+              className={`rail-tool${toolsOpen ? ' is-active' : ''}`}
+              title="Herramientas del taller"
+              onClick={() => setToolsOpen((o) => !o)}
+            >
+              蔵
+            </button>
           )}
-          <button type="button" className="btn-seal btn-seal-sm" onClick={() => void logout()}>
-            Salir
+          <button type="button" className="rail-tool rail-exit" title="Salir" onClick={() => void logout()}>
+            出
           </button>
         </div>
-      </header>
+      </aside>
 
-      {isGuest && (
-        <motion.div
-          className="guest-banner"
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          Vista de invitado · solo lectura
-        </motion.div>
-      )}
+      <main className="canvas">
+        <header className="canvas-header">
+          <div className="canvas-titling">
+            <p className="canvas-eyebrow">
+              算額 · Sangaku · sesión {sessionLabel}
+              {isGuest && <span className="eyebrow-guest"> · invitado</span>}
+            </p>
+            <h1 className="canvas-title">
+              Templo de <em>pendientes</em>
+            </h1>
+            <p className="canvas-sub">
+              {tasks.length} tareas registradas · badge {meta.badge}
+            </p>
+          </div>
+          <div className="stamp-row" aria-label="Resumen">
+            {[
+              { label: 'Total', value: kpis.total, tone: 'ink' },
+              { label: 'Vencidas', value: kpis.vencidas, tone: 'crimson' },
+              { label: 'Por vencer', value: kpis.porVencer, tone: 'copper' },
+              { label: 'En proceso', value: kpis.enProceso, tone: 'gold' },
+              { label: 'Completas', value: kpis.completadas, tone: 'ivory' },
+            ].map((k, i) => (
+              <motion.div
+                key={k.label}
+                className={`stamp-stat tone-${k.tone}`}
+                initial={prefs.reduceMotion ? false : { opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.06, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <CountUp value={loading ? 0 : k.value} />
+                <p>{k.label}</p>
+              </motion.div>
+            ))}
+          </div>
+        </header>
 
-      <section className="kpi-grid">
-        {[
-          { label: 'Total', value: kpis.total, tone: 'ink' },
-          { label: 'Vencidas', value: kpis.vencidas, tone: 'crimson' },
-          { label: 'Por vencer ≤7d', value: kpis.porVencer, tone: 'copper' },
-          { label: 'En proceso', value: kpis.enProceso, tone: 'gold' },
-          { label: 'Completadas', value: kpis.completadas, tone: 'ivory' },
-        ].map((k, i) => (
-          <motion.article
-            key={k.label}
-            className={`kpi-card tone-${k.tone}`}
-            initial={prefs.reduceMotion ? false : { opacity: 0, y: 16 }}
+        <BrushDivider />
+
+        {isGuest && (
+          <motion.div
+            className="guest-banner"
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           >
-            <p>{k.label}</p>
-            <CountUp value={loading ? 0 : k.value} />
-          </motion.article>
-        ))}
-      </section>
+            Vista de invitado · solo lectura
+          </motion.div>
+        )}
 
-      <nav className="view-switch glass-panel" aria-label="Vistas">
-        {(Object.keys(VIEW_LABELS) as AppView[]).map((v) => (
-          <button
-            key={v}
-            type="button"
-            className={view === v ? 'is-active' : ''}
-            onClick={() => setView(v)}
-          >
-            <span className="view-num">{v === 'list' ? '1' : v === 'calendar' ? '2' : v === 'kanban' ? '3' : '4'}</span>
-            {VIEW_LABELS[v]}
-          </button>
-        ))}
-      </nav>
+        <AnimatePresence>
+          {isAdmin && toolsOpen && (
+            <motion.section
+              className="tools-drawer"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <p className="tools-kicker">蔵 · herramientas del taller</p>
+              <div className="tools-actions">
+                <button type="button" className="btn-ghost" onClick={() => setShowAdd(true)}>
+                  + Tarea
+                </button>
+                <button type="button" className="btn-ghost" onClick={() => setShowImport(true)}>
+                  Importar CSV / Excel
+                </button>
+                <button type="button" className="btn-ghost" onClick={handleSeedLocal}>
+                  Cargar seed
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={busy}
+                  onClick={() => void handleForceReseed()}
+                >
+                  {busy ? 'Restaurando…' : `Restaurar ${seedCount()}`}
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={busy}
+                  onClick={() => void handleSyncFirestore()}
+                >
+                  {busy ? 'Sincronizando…' : 'Sync Firestore'}
+                </button>
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
 
-      <motion.section className="filters glass-panel" layout transition={{ duration: 0.25 }}>
+        <motion.section className="scroll-fold filters" layout transition={{ duration: 0.25 }}>
         <input
           ref={searchRef}
           className="search"
@@ -633,6 +685,7 @@ export function Dashboard() {
           </AnimatePresence>
         )}
       </div>
+      </main>
 
       <AnimatePresence>
         {toast && (

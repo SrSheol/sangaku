@@ -1,10 +1,13 @@
 import { useEffect, useRef } from 'react'
 
-/** Soft sumi-e geometry + parallax gold dust layers. */
+/**
+ * Ink diffusing in water: soft overlapping blooms drifting slowly,
+ * plus a few hairline "kintsugi" cracks of gold. No geometric grid —
+ * this reads as sumi-e wash, not a tech dashboard backdrop.
+ */
 export function LoginBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const layerRef = useRef<HTMLDivElement>(null)
-  const dustRef = useRef<HTMLDivElement>(null)
   const pointer = useRef({ x: 0.5, y: 0.5 })
 
   useEffect(() => {
@@ -13,13 +16,10 @@ export function LoginBackground() {
         x: e.clientX / window.innerWidth,
         y: e.clientY / window.innerHeight,
       }
-      const dx = (pointer.current.x - 0.5) * 24
-      const dy = (pointer.current.y - 0.5) * 18
+      const dx = (pointer.current.x - 0.5) * 18
+      const dy = (pointer.current.y - 0.5) * 14
       if (layerRef.current) {
-        layerRef.current.style.transform = `translate3d(${dx * 0.35}px, ${dy * 0.35}px, 0)`
-      }
-      if (dustRef.current) {
-        dustRef.current.style.transform = `translate3d(${dx * -0.55}px, ${dy * -0.45}px, 0)`
+        layerRef.current.style.transform = `translate3d(${dx * 0.3}px, ${dy * 0.3}px, 0)`
       }
     }
     window.addEventListener('pointermove', onMove, { passive: true })
@@ -35,16 +35,16 @@ export function LoginBackground() {
     let raf = 0
     let t = 0
 
-    type Motif = {
+    type Bloom = {
       x: number
       y: number
       r: number
       speed: number
       phase: number
-      kind: 'circle' | 'arc' | 'tri'
+      drift: number
     }
 
-    let motifs: Motif[] = []
+    let blooms: Bloom[] = []
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -56,87 +56,48 @@ export function LoginBackground() {
       canvas.style.height = `${h}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-      const count = Math.max(14, Math.floor((w * h) / 85000))
-      motifs = Array.from({ length: count }, () => ({
+      const count = Math.max(5, Math.floor((w * h) / 260000))
+      blooms = Array.from({ length: count }, () => ({
         x: Math.random() * w,
         y: Math.random() * h,
-        r: 18 + Math.random() * 75,
-        speed: 0.12 + Math.random() * 0.32,
+        r: 160 + Math.random() * 260,
+        speed: 0.05 + Math.random() * 0.08,
         phase: Math.random() * Math.PI * 2,
-        kind: (['circle', 'arc', 'tri'] as const)[Math.floor(Math.random() * 3)],
+        drift: 0.4 + Math.random() * 0.6,
       }))
     }
 
     const draw = () => {
       raf = requestAnimationFrame(draw)
-      t += 0.008
+      t += 0.006
       const w = window.innerWidth
       const h = window.innerHeight
-      const px = (pointer.current.x - 0.5) * 18
-      const py = (pointer.current.y - 0.5) * 12
+      const px = (pointer.current.x - 0.5) * 30
+      const py = (pointer.current.y - 0.5) * 22
 
-      ctx.clearRect(0, 0, w, h)
-
-      // deep espresso wash
-      const g = ctx.createRadialGradient(
-        w * 0.5 + px,
-        h * 0.32 + py,
-        40,
-        w * 0.5,
-        h * 0.5,
-        Math.max(w, h) * 0.78,
-      )
-      g.addColorStop(0, '#1c1912')
-      g.addColorStop(0.45, '#12100a')
-      g.addColorStop(1, '#0a0801')
-      ctx.fillStyle = g
+      // washi paper base
+      ctx.fillStyle = '#efe7d3'
       ctx.fillRect(0, 0, w, h)
 
-      for (const m of motifs) {
-        const pulse = 0.5 + 0.5 * Math.sin(t * m.speed + m.phase)
-        const alpha = 0.03 + pulse * 0.06
-        const ox = m.x + px * 0.4
-        const oy = m.y + py * 0.4 + Math.sin(t * m.speed + m.phase) * 5
-        ctx.strokeStyle = `rgba(202, 161, 0, ${alpha})`
-        ctx.lineWidth = 1
+      ctx.globalCompositeOperation = 'multiply'
+      for (const b of blooms) {
+        const ox = b.x + Math.sin(t * b.speed + b.phase) * 40 * b.drift + px * 0.15
+        const oy = b.y + Math.cos(t * b.speed * 0.8 + b.phase) * 30 * b.drift + py * 0.15
+        const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, b.r)
+        g.addColorStop(0, 'rgba(20, 17, 12, 0.10)')
+        g.addColorStop(0.55, 'rgba(20, 17, 12, 0.05)')
+        g.addColorStop(1, 'rgba(20, 17, 12, 0)')
+        ctx.fillStyle = g
         ctx.beginPath()
-        if (m.kind === 'circle') {
-          ctx.arc(ox, oy, m.r, 0, Math.PI * 2)
-        } else if (m.kind === 'arc') {
-          ctx.arc(
-            ox,
-            oy,
-            m.r,
-            m.phase + t * 0.2,
-            m.phase + t * 0.2 + Math.PI * (0.6 + pulse * 0.5),
-          )
-        } else {
-          ctx.moveTo(ox, oy - m.r * 0.6)
-          ctx.lineTo(ox + m.r * 0.55, oy + m.r * 0.45)
-          ctx.lineTo(ox - m.r * 0.55, oy + m.r * 0.45)
-          ctx.closePath()
-        }
-        ctx.stroke()
-
-        if (m.kind === 'circle' && pulse > 0.72) {
-          ctx.beginPath()
-          ctx.arc(ox, oy, m.r * 0.32, 0, Math.PI * 2)
-          ctx.strokeStyle = `rgba(202, 161, 0, ${alpha * 1.2})`
-          ctx.stroke()
-        }
+        ctx.arc(ox, oy, b.r, 0, Math.PI * 2)
+        ctx.fill()
       }
+      ctx.globalCompositeOperation = 'source-over'
 
-      // warm lacquer vignette
-      const vg = ctx.createRadialGradient(
-        w / 2,
-        h / 2,
-        Math.min(w, h) * 0.18,
-        w / 2,
-        h / 2,
-        Math.max(w, h) * 0.72,
-      )
-      vg.addColorStop(0, 'rgba(0,0,0,0)')
-      vg.addColorStop(1, 'rgba(10, 8, 1, 0.55)')
+      // deep vignette pulling toward ink at the edges
+      const vg = ctx.createRadialGradient(w / 2, h * 0.42, Math.min(w, h) * 0.15, w / 2, h / 2, Math.max(w, h) * 0.75)
+      vg.addColorStop(0, 'rgba(11, 9, 6, 0)')
+      vg.addColorStop(1, 'rgba(11, 9, 6, 0.78)')
       ctx.fillStyle = vg
       ctx.fillRect(0, 0, w, h)
     }
@@ -153,8 +114,12 @@ export function LoginBackground() {
   return (
     <>
       <canvas ref={canvasRef} className="login-bg" aria-hidden />
-      <div ref={layerRef} className="login-parallax login-parallax-geo" aria-hidden />
-      <div ref={dustRef} className="login-parallax login-parallax-dust" aria-hidden />
+      <div ref={layerRef} className="login-parallax login-parallax-crack" aria-hidden>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          <path d="M8 92 L22 70 L18 48 L34 30 L30 8" fill="none" stroke="var(--gold)" strokeWidth="0.25" opacity="0.4" />
+          <path d="M96 10 L82 26 L88 44 L74 60 L80 94" fill="none" stroke="var(--gold)" strokeWidth="0.2" opacity="0.3" />
+        </svg>
+      </div>
     </>
   )
 }
