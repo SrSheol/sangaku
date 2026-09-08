@@ -2142,28 +2142,29 @@ button {
 }
 
 @keyframes koi-swim-a {
-  0%    { transform: translate(-16vw, 22vh) rotate(6deg) scaleX(1); }
-  18%   { transform: translate(38vw, 14vh) rotate(2deg) scaleX(1); }
-  30%   { transform: translate(66vw, 20vh) rotate(-4deg) scaleX(1); }
-  38%   { transform: translate(78vw, 19vh) rotate(-4deg) scaleX(1); }
-  46%   { transform: translate(116vw, 10vh) rotate(-8deg) scaleX(1); }
-  50%   { transform: translate(122vw, 10vh) rotate(0deg) scaleX(-1); }
-  70%   { transform: translate(58vw, 68vh) rotate(10deg) scaleX(-1); }
-  82%   { transform: translate(18vw, 74vh) rotate(4deg) scaleX(-1); }
-  90%   { transform: translate(-2vw, 70vh) rotate(4deg) scaleX(-1); }
-  100%  { transform: translate(-16vw, 22vh) rotate(6deg) scaleX(1); }
+  /* SVG faces left (head at low x); flip when swimming right */
+  0%    { transform: translate(-16vw, 22vh) rotate(6deg) scaleX(-1); }
+  18%   { transform: translate(38vw, 14vh) rotate(2deg) scaleX(-1); }
+  30%   { transform: translate(66vw, 20vh) rotate(-4deg) scaleX(-1); }
+  38%   { transform: translate(78vw, 19vh) rotate(-4deg) scaleX(-1); }
+  46%   { transform: translate(116vw, 10vh) rotate(-8deg) scaleX(-1); }
+  50%   { transform: translate(122vw, 10vh) rotate(0deg) scaleX(1); }
+  70%   { transform: translate(58vw, 68vh) rotate(10deg) scaleX(1); }
+  82%   { transform: translate(18vw, 74vh) rotate(4deg) scaleX(1); }
+  90%   { transform: translate(-2vw, 70vh) rotate(4deg) scaleX(1); }
+  100%  { transform: translate(-16vw, 22vh) rotate(6deg) scaleX(-1); }
 }
 
 @keyframes koi-swim-b {
-  0%    { transform: translate(120vw, 78vh) rotate(-4deg) scaleX(-1); }
-  22%   { transform: translate(64vw, 84vh) rotate(2deg) scaleX(-1); }
-  34%   { transform: translate(40vw, 80vh) rotate(2deg) scaleX(-1); }
-  42%   { transform: translate(24vw, 88vh) rotate(6deg) scaleX(-1); }
-  50%   { transform: translate(-14vw, 86vh) rotate(0deg) scaleX(1); }
-  68%   { transform: translate(30vw, 34vh) rotate(-8deg) scaleX(1); }
-  78%   { transform: translate(70vw, 26vh) rotate(-2deg) scaleX(1); }
-  86%   { transform: translate(96vw, 30vh) rotate(-2deg) scaleX(1); }
-  100%  { transform: translate(120vw, 78vh) rotate(-4deg) scaleX(-1); }
+  0%    { transform: translate(120vw, 78vh) rotate(-4deg) scaleX(1); }
+  22%   { transform: translate(64vw, 84vh) rotate(2deg) scaleX(1); }
+  34%   { transform: translate(40vw, 80vh) rotate(2deg) scaleX(1); }
+  42%   { transform: translate(24vw, 88vh) rotate(6deg) scaleX(1); }
+  50%   { transform: translate(-14vw, 86vh) rotate(0deg) scaleX(-1); }
+  68%   { transform: translate(30vw, 34vh) rotate(-8deg) scaleX(-1); }
+  78%   { transform: translate(70vw, 26vh) rotate(-2deg) scaleX(-1); }
+  86%   { transform: translate(96vw, 30vh) rotate(-2deg) scaleX(-1); }
+  100%  { transform: translate(120vw, 78vh) rotate(-4deg) scaleX(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
